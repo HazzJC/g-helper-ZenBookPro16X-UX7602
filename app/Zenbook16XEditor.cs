@@ -26,15 +26,23 @@ namespace GHelper
         readonly KeyboardCanvas canvas = new();
         readonly RComboBox profileCombo = new();
         readonly RComboBox effectCombo = new();
-        readonly TrackBar speedBar = new();
-        readonly TrackBar brightnessBar = new();
+        readonly StepSelector speedSteps = new();
+        readonly StepSelector brightnessSteps = new();
         readonly CheckBox liveApply = new();
         readonly Label status = new();
+        readonly ToolTip tips = new();
         readonly List<Swatch> swatches = new();
         Swatch? customSwatch;
 
         Zenbook16XProfile profile = new();
         bool loading;
+
+        /// <summary>
+        /// Set by Save and close, which has just made this profile the keyboard's lighting. Any
+        /// other close restores whatever the keyboard was configured to show, so browsing a
+        /// profile in the editor never leaves it on the keyboard by accident.
+        /// </summary>
+        bool keepPreviewOnClose;
 
         // Streaming a frame is 11 USB feature reports; doing that inline on every mouse-move
         // during a drag stalls the UI thread. Changes are snapshotted and a background timer
@@ -70,15 +78,15 @@ namespace GHelper
             }
 
             RefreshProfileList();
-            LoadProfile(Zenbook16XProfiles.ActiveName);
+            LoadProfile(Zenbook16XProfiles.LastEditedName);
 
-            brightnessBar.Value = Math.Clamp(AppConfig.Get(BrightnessKey, 3), 0, 3);
+            brightnessSteps.SetValueSilently(AppConfig.Get(BrightnessKey, 3));
             SelectPaintColor(Palette[8]);
 
             canvas.CellsChanged += (_, _) => { Store("Saved"); QueueApply(); };
             effectCombo.SelectedIndexChanged += (_, _) => { if (!loading) { Store("Saved"); QueueApply(); } };
-            speedBar.ValueChanged += (_, _) => { if (!loading) { Store("Saved"); QueueApply(); } };
-            brightnessBar.ValueChanged += BrightnessBar_ValueChanged;
+            speedSteps.ValueChanged += (_, _) => { if (!loading) { Store("Saved"); QueueApply(); } };
+            brightnessSteps.ValueChanged += BrightnessSteps_ValueChanged;
             profileCombo.SelectedIndexChanged += ProfileCombo_SelectedIndexChanged;
 
             applyTimer.Elapsed += ApplyTimer_Elapsed;
@@ -89,6 +97,9 @@ namespace GHelper
                 applyTimer.Stop();
                 applyTimer.Dispose();
                 StoreProfile();
+
+                if (!keepPreviewOnClose)
+                    Task.Run(() => { try { Aura.ApplyAura(); } catch { } });
             };
         }
 
@@ -131,10 +142,12 @@ namespace GHelper
             profileCombo.Margin = new Padding(0, 3, 10, 0);
             bar.Controls.Add(profileCombo);
 
-            bar.Controls.Add(Action("New…", (_, _) => NewProfile(), 84));
-            bar.Controls.Add(Action("Rename…", (_, _) => RenameProfile(), 96));
-            bar.Controls.Add(Action("Duplicate", (_, _) => DuplicateProfile(), 96));
-            bar.Controls.Add(Action("Delete", (_, _) => DeleteProfile(), 84));
+            bar.Controls.Add(Action("New…", (_, _) => NewProfile(),
+                "Start a new, blank profile"));
+            bar.Controls.Add(Action("Save as profile…", (_, _) => SaveAsProfile(),
+                "Save the current layout under a new name, and optionally make it the default"));
+            bar.Controls.Add(Action("Rename…", (_, _) => RenameProfile()));
+            bar.Controls.Add(Action("Delete", (_, _) => DeleteProfile()));
 
             status.AutoSize = true;
             status.Margin = new Padding(16, 10, 0, 0);
@@ -174,8 +187,8 @@ namespace GHelper
                 ForeColor = Color.FromArgb(150, 150, 150),
             });
 
-            bar.Controls.Add(Action("Fill all", (_, _) => canvas.FillAll(canvas.PaintColor), 84));
-            bar.Controls.Add(Action("Clear", (_, _) => canvas.FillAll(Color.Black), 76));
+            bar.Controls.Add(Action("Fill all", (_, _) => canvas.FillAll(canvas.PaintColor)));
+            bar.Controls.Add(Action("Clear", (_, _) => canvas.FillAll(Color.Black)));
 
             return bar;
         }
@@ -198,12 +211,13 @@ namespace GHelper
             bar.Controls.Add(effectCombo);
 
             bar.Controls.Add(Caption("Speed"));
-            SetupSlider(speedBar, 1, 5);
-            bar.Controls.Add(speedBar);
+            SetupSteps(speedSteps, Zenbook16XProfile.SPEED_MIN, Zenbook16XProfile.SPEED_MAX,
+                "Animation speed: 1 slow, 2 normal, 3 fast (Static ignores it)");
+            bar.Controls.Add(speedSteps);
 
             bar.Controls.Add(Caption("Brightness"));
-            SetupSlider(brightnessBar, 0, 3);
-            bar.Controls.Add(brightnessBar);
+            SetupSteps(brightnessSteps, 0, 3, "Keyboard brightness: 0 is off, 3 is maximum");
+            bar.Controls.Add(brightnessSteps);
 
             liveApply.Text = "Live preview";
             liveApply.Checked = true;
@@ -211,9 +225,11 @@ namespace GHelper
             liveApply.Margin = new Padding(4, 9, 18, 0);
             bar.Controls.Add(liveApply);
 
-            bar.Controls.Add(Action("Apply now", (_, _) => QueueApply(true), 104));
-            bar.Controls.Add(Action("Set as active mode", (_, _) => SetAsActiveMode(), 164));
-            bar.Controls.Add(Action("Save and close", (_, _) => SaveAndClose(), 136));
+            bar.Controls.Add(Action("Apply now", (_, _) => QueueApply(true)));
+            bar.Controls.Add(Action("Set as default", (_, _) => SetAsDefault(),
+                "Make this profile the keyboard's lighting (Custom (Per-Key) mode)"));
+            bar.Controls.Add(Action("Save and close", (_, _) => SaveAndClose(),
+                "Save, make this profile the keyboard's lighting, and close"));
 
             return bar;
         }
@@ -225,21 +241,21 @@ namespace GHelper
             Margin = new Padding(0, topMargin, 8, 0),
         };
 
-        void SetupSlider(TrackBar bar, int min, int max)
+        void SetupSteps(StepSelector steps, int min, int max, string tip)
         {
-            bar.Minimum = min;
-            bar.Maximum = max;
-            bar.TickStyle = TickStyle.None;
-            bar.Width = (int)(100 * DpiScale);
-            bar.Height = 28;
-            bar.Margin = new Padding(0, 2, 18, 0);
+            steps.Maximum = max;
+            steps.Minimum = min;
+            int count = max - min + 1;
+            steps.Size = new Size((int)(count * 32 * DpiScale), (int)(28 * DpiScale));
+            steps.Margin = new Padding(0, 3, 18, 0);
+            tips.SetToolTip(steps, tip);
         }
 
         /// <summary>
         /// Buttons size to their own text. Fixed pixel widths clip once the form is DPI-scaled -
         /// the label grows with the font but the width doesn't.
         /// </summary>
-        Button Action(string text, EventHandler onClick, int _ = 0)
+        Button Action(string text, EventHandler onClick, string? tip = null)
         {
             var button = new RButton
             {
@@ -250,6 +266,7 @@ namespace GHelper
                 Margin = new Padding(0, 2, 8, 0),
             };
             button.Click += onClick;
+            if (tip is not null) tips.SetToolTip(button, tip);
             return button;
         }
 
@@ -262,12 +279,35 @@ namespace GHelper
 
         // ------------------------------------------------------------ profiles
 
+        /// <summary>A dropdown entry; the default profile is marked so it's visible at a glance.</summary>
+        sealed record ProfileItem(string Name, bool IsDefault)
+        {
+            public override string ToString() => IsDefault ? $"{Name}   ★ default" : Name;
+        }
+
         void RefreshProfileList()
         {
             loading = true;
+
+            string defaultName = Zenbook16XProfiles.DefaultName;
             profileCombo.Items.Clear();
-            foreach (var name in Zenbook16XProfiles.Names()) profileCombo.Items.Add(name);
+            foreach (var name in Zenbook16XProfiles.Names())
+                profileCombo.Items.Add(new ProfileItem(name, name == defaultName));
+
+            SelectInList(profile.Name);
             loading = false;
+        }
+
+        void SelectInList(string name)
+        {
+            for (int i = 0; i < profileCombo.Items.Count; i++)
+            {
+                if (profileCombo.Items[i] is ProfileItem item && item.Name == name)
+                {
+                    profileCombo.SelectedIndex = i;
+                    return;
+                }
+            }
         }
 
         void LoadProfile(string name)
@@ -277,24 +317,26 @@ namespace GHelper
             profile = Zenbook16XProfiles.Load(name);
             canvas.LoadColors(profile.Frame);
             effectCombo.SelectedIndex = (int)profile.Effect;
-            speedBar.Value = Math.Clamp(profile.Speed, 1, 5);
-
-            int index = profileCombo.Items.IndexOf(name);
-            if (index >= 0) profileCombo.SelectedIndex = index;
+            speedSteps.SetValueSilently(profile.Speed);
+            SelectInList(name);
+            Zenbook16XProfiles.LastEditedName = name;
 
             loading = false;
             SetStatus($"Loaded “{name}”");
             QueueApply();
         }
 
-        /// <summary>Copies the current UI state into the profile object and persists it.</summary>
+        /// <summary>
+        /// Copies the current UI state into the profile object and persists it. Deliberately does
+        /// not touch the default - editing a profile shouldn't change what the keyboard shows.
+        /// </summary>
         void StoreProfile()
         {
             Array.Copy(canvas.Colors, profile.Frame, Math.Min(canvas.Colors.Length, profile.Frame.Length));
             profile.Effect = (CustomFrameMode)Math.Clamp(effectCombo.SelectedIndex, 0, 3);
-            profile.Speed = speedBar.Value;
+            profile.Speed = speedSteps.Value;
             Zenbook16XProfiles.Save(profile);
-            Zenbook16XProfiles.ActiveName = profile.Name;
+            Zenbook16XProfiles.LastEditedName = profile.Name;
         }
 
         void Store(string message)
@@ -305,50 +347,60 @@ namespace GHelper
 
         void ProfileCombo_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            if (loading || profileCombo.SelectedItem is not string name || name == profile.Name) return;
+            if (loading || profileCombo.SelectedItem is not ProfileItem item || item.Name == profile.Name) return;
             StoreProfile();
-            LoadProfile(name);
+            LoadProfile(item.Name);
         }
 
         void NewProfile()
         {
-            string? name = Prompt("New profile", "Name:", "Profile " + (Zenbook16XProfiles.Names().Count + 1));
-            if (name is null) return;
+            var result = ProfileDialog("New profile", "Profile " + (Zenbook16XProfiles.Names().Count + 1), offerDefault: false);
+            if (result is null) return;
 
             StoreProfile();
-            profile = new Zenbook16XProfile { Name = Unique(Zenbook16XProfiles.Sanitize(name)) };
+            profile = new Zenbook16XProfile { Name = Zenbook16XProfiles.Unique(Zenbook16XProfiles.Sanitize(result.Value.Name)) };
             Zenbook16XProfiles.Save(profile);
             RefreshProfileList();
             LoadProfile(profile.Name);
         }
 
-        void DuplicateProfile()
+        /// <summary>
+        /// Saves what's on the canvas under a new name - the current profile is left as it was -
+        /// and optionally makes the new one the keyboard's default lighting.
+        /// </summary>
+        void SaveAsProfile()
         {
-            string? name = Prompt("Duplicate profile", "Name:", profile.Name + " copy");
-            if (name is null) return;
+            var result = ProfileDialog("Save as profile", profile.Name + " copy", offerDefault: true);
+            if (result is null) return;
 
             StoreProfile();
+
             var copy = profile.Clone();
-            copy.Name = Unique(Zenbook16XProfiles.Sanitize(name));
+            copy.Name = Zenbook16XProfiles.Unique(Zenbook16XProfiles.Sanitize(result.Value.Name));
             Zenbook16XProfiles.Save(copy);
+
+            profile = copy;
+            if (result.Value.SetDefault) MakeDefault();
+
             RefreshProfileList();
             LoadProfile(copy.Name);
+            SetStatus(result.Value.SetDefault
+                ? $"Saved “{copy.Name}” and set it as the default"
+                : $"Saved as “{copy.Name}”");
         }
 
         void RenameProfile()
         {
-            string? name = Prompt("Rename profile", "Name:", profile.Name);
-            if (name is null) return;
+            var result = ProfileDialog("Rename profile", profile.Name, offerDefault: false);
+            if (result is null) return;
 
-            string clean = Zenbook16XProfiles.Sanitize(name);
+            string clean = Zenbook16XProfiles.Sanitize(result.Value.Name);
             if (clean == profile.Name) return;
-            clean = Unique(clean);
+            clean = Zenbook16XProfiles.Unique(clean);
 
-            string old = profile.Name;
             StoreProfile();
+            Zenbook16XProfiles.Rename(profile.Name, clean);
             profile.Name = clean;
-            Zenbook16XProfiles.Save(profile);
-            Zenbook16XProfiles.Delete(old);
             RefreshProfileList();
             LoadProfile(clean);
         }
@@ -369,18 +421,11 @@ namespace GHelper
             LoadProfile(Zenbook16XProfiles.Names()[0]);
         }
 
-        static string Unique(string name)
-        {
-            var names = Zenbook16XProfiles.Names();
-            if (!names.Contains(name)) return name;
-
-            for (int i = 2; i < 100; i++)
-                if (!names.Contains($"{name} {i}")) return $"{name} {i}";
-            return name + " " + Guid.NewGuid().ToString("N").Substring(0, 4);
-        }
-
-        /// <summary>Small inline text prompt - WinForms has no built-in one.</summary>
-        string? Prompt(string title, string label, string initial)
+        /// <summary>
+        /// Name prompt, optionally with a "Set as default" box. Laid out with auto-sizing panels
+        /// rather than fixed coordinates so it survives DPI scaling the same way the editor does.
+        /// </summary>
+        (string Name, bool SetDefault)? ProfileDialog(string title, string initial, bool offerDefault)
         {
             using var dialog = new RForm
             {
@@ -389,21 +434,64 @@ namespace GHelper
                 StartPosition = FormStartPosition.CenterParent,
                 MinimizeBox = false,
                 MaximizeBox = false,
-                ClientSize = new Size(360, 130),
+                ShowInTaskbar = false,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(16),
             };
 
-            var prompt = new Label { Text = label, AutoSize = true, Location = new Point(16, 18) };
-            var input = new RTextBox { Text = initial, Location = new Point(16, 44), Width = 328 };
-            var ok = new RButton { Text = "OK", DialogResult = DialogResult.OK, Location = new Point(168, 84), Width = 84, Height = 30 };
-            var cancel = new RButton { Text = "Cancel", DialogResult = DialogResult.Cancel, Location = new Point(260, 84), Width = 84, Height = 30 };
+            var layout = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.TopDown,
+                AutoSize = true,
+                WrapContents = false,
+                Dock = DockStyle.Fill,
+            };
 
-            dialog.Controls.AddRange(new Control[] { prompt, input, ok, cancel });
+            layout.Controls.Add(new Label { Text = "Name", AutoSize = true, Margin = new Padding(0, 0, 0, 4) });
+
+            var input = new RTextBox
+            {
+                Text = initial,
+                Width = (int)(320 * DpiScale),
+                Margin = new Padding(0, 0, 0, 12),
+            };
+            layout.Controls.Add(input);
+
+            var setDefault = new CheckBox
+            {
+                Text = "Set as default — make this the keyboard's lighting",
+                AutoSize = true,
+                Checked = false,
+                Margin = new Padding(0, 0, 0, 14),
+                Visible = offerDefault,
+            };
+            if (offerDefault) layout.Controls.Add(setDefault);
+
+            var buttons = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.RightToLeft,
+                AutoSize = true,
+                WrapContents = false,
+                Width = input.Width,
+                Margin = Padding.Empty,
+            };
+            var cancel = new RButton { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true, Padding = new Padding(12, 5, 12, 5), Margin = Padding.Empty };
+            var ok = new RButton { Text = "Save", DialogResult = DialogResult.OK, AutoSize = true, Padding = new Padding(12, 5, 12, 5), Margin = new Padding(0, 0, 8, 0) };
+            buttons.Controls.Add(cancel);
+            buttons.Controls.Add(ok);
+            layout.Controls.Add(buttons);
+
+            dialog.Controls.Add(layout);
             dialog.AcceptButton = ok;
             dialog.CancelButton = cancel;
+            dialog.TopMost = TopMost;
             dialog.InitTheme();
 
-            input.SelectAll();
-            return dialog.ShowDialog(this) == DialogResult.OK ? input.Text : null;
+            dialog.Shown += (_, _) => { input.Focus(); input.SelectAll(); };
+
+            if (dialog.ShowDialog(this) != DialogResult.OK || string.IsNullOrWhiteSpace(input.Text)) return null;
+            return (input.Text, offerDefault && setDefault.Checked);
         }
 
         void SetStatus(string text)
@@ -418,9 +506,9 @@ namespace GHelper
             ? "keyboard_brightness_ac"
             : "keyboard_brightness";
 
-        void BrightnessBar_ValueChanged(object? sender, EventArgs e)
+        void BrightnessSteps_ValueChanged(object? sender, EventArgs e)
         {
-            int level = brightnessBar.Value;
+            int level = brightnessSteps.Value;
             AppConfig.Set(BrightnessKey, level);
 
             Task.Run(() =>
@@ -449,7 +537,7 @@ namespace GHelper
             {
                 pendingFrame = snapshot;
                 pendingEffect = (CustomFrameMode)Math.Clamp(effectCombo.SelectedIndex, 0, 3);
-                pendingSpeed = speedBar.Value * 0.4;
+                pendingSpeed = Zenbook16XProfile.FactorFor(speedSteps.Value);
             }
         }
 
@@ -485,28 +573,37 @@ namespace GHelper
         }
 
         /// <summary>
-        /// Makes this profile the keyboard's active mode, so it survives closing the editor.
-        /// Streams directly rather than relying on ApplyAura, which is a no-op while the backlight
-        /// is off and would otherwise silently do nothing.
+        /// Makes the current profile the default and switches the keyboard to Custom (Per-Key)
+        /// mode, so it's what the keyboard shows from now on - including after a restart.
         /// </summary>
-        void SetAsActiveMode()
+        void MakeDefault()
         {
-            StoreProfile();
+            Zenbook16XProfiles.DefaultName = profile.Name;
             AppConfig.Set("aura_mode", (int)AuraMode.CUSTOM_PERKEY);
-
             try { Aura.Mode = AuraMode.CUSTOM_PERKEY; } catch { }
-            QueueApply(true);
 
-            SetStatus($"“{profile.Name}” is now the active keyboard mode");
+            // Keep the main window's mode dropdown in step, rather than showing a stale mode.
+            try { Program.settingsForm?.SyncAuraMode(); } catch { }
         }
 
         /// <summary>
-        /// Saves the profile, makes it the active keyboard mode so it survives the editor closing,
-        /// and shuts the window.
+        /// Streams directly rather than relying on ApplyAura, which is a no-op while the backlight
+        /// is off and would otherwise silently do nothing.
         /// </summary>
+        void SetAsDefault()
+        {
+            StoreProfile();
+            MakeDefault();
+            RefreshProfileList();
+            QueueApply(true);
+
+            SetStatus($"“{profile.Name}” is now the default keyboard lighting");
+        }
+
         void SaveAndClose()
         {
-            SetAsActiveMode();
+            SetAsDefault();
+            keepPreviewOnClose = true;
             Close();
         }
     }

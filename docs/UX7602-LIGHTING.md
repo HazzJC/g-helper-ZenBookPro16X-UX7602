@@ -281,4 +281,7 @@ animating after it is killed — the MCU renders those itself.
   and the wrong shape. See §3.
 - ~~Lightbar resolution~~ — one LED each, `147` and `163`. No gradient possible.
 - ~~Arrow-key slots~~ — up `139`, left `159`, down `160`, right `161`.
-- ~~Software-driven modes not working~~ — the missing `0xA2 00 00` enable. See §2.
+- ~~Software-driven modes blocked~~ — the missing `0xA2 00 00` enable. See §2. The modes
+  themselves are still hidden from the dropdown on this model pending per-mode work; see the
+  status table in `FINDINGS.md`. GPU Mode and Battery additionally send the Strix `0x5D`
+  command, which this keyboard doesn't have.

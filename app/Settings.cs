@@ -1395,6 +1395,23 @@ namespace GHelper
         }
 
         /// <summary>
+        /// Reflects an aura mode that was set elsewhere (the per-key editor) in the dropdown,
+        /// without re-applying it - the caller has already done that.
+        /// </summary>
+        public void SyncAuraMode()
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(SyncAuraMode);
+                return;
+            }
+
+            comboKeyboard.SelectedValueChanged -= ComboKeyboard_SelectedValueChanged;
+            try { comboKeyboard.SelectedValue = (AuraMode)AppConfig.Get("aura_mode"); }
+            finally { comboKeyboard.SelectedValueChanged += ComboKeyboard_SelectedValueChanged; }
+        }
+
+        /// <summary>
         /// Adds the per-key editor button for the ZenBook Pro 16X. Done in code rather than in the
         /// designer so the change stays in one place and no other model's layout is touched.
         /// </summary>

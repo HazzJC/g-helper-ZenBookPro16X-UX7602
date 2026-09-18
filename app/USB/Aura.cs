@@ -221,21 +221,29 @@ namespace GHelper.USB
                 return modes;
             }
 
-            // These stream frames through ApplyDirect(Color[]). On the Zenbook Pro 16X they used
-            // to do nothing and were hidden; the cause was the missing [5C A2 00 00] enable
-            // packet, without which the MCU kept rendering its own firmware effect over the top
-            // of every streamed frame. Fixed in ApplyZenbook16XDirect, so they're offered again.
-            modes[AuraMode.HEATMAP] = "Heatmap";
-            modes[AuraMode.GPUMODE] = "GPU Mode";
-            modes[AuraMode.AMBIENT] = "Ambient";
-            modes[AuraMode.BATTERY] = "Battery";
-            modes[AuraMode.AUDIO] = "Audio Spectrum";
-            modes[AuraMode.AUDIOPULSE] = "Audio Pulse";
-
-            if (isStrixKb)
+            // Software-driven modes, hidden on the Zenbook Pro 16X until each is implemented and
+            // verified for it. Status there:
+            // - GPU Mode and Battery can't work as written: they bypass ApplyDirect and send the
+            //   Strix AuraMessage on report 0x5D, which this keyboard doesn't expose at all. The
+            //   fix is to route their colour through ApplyDirect like Heatmap does.
+            // - Heatmap and Audio/Audio Pulse do go through ApplyDirect, but were never tested here.
+            // - Zone Test, Gradient and Ambient rendered in a quick test once the [5C A2 00 00]
+            //   enable packet was fixed, but map the Strix 8-zone layout onto this keyboard rather
+            //   than using its real geometry.
+            if (!AppConfig.IsZenbookPro16X())
             {
-                modes[AuraMode.GRADIENT] = "Gradient";
-                modes[AuraMode.ZONETEST] = "Zone Test";
+                modes[AuraMode.HEATMAP] = "Heatmap";
+                modes[AuraMode.GPUMODE] = "GPU Mode";
+                modes[AuraMode.AMBIENT] = "Ambient";
+                modes[AuraMode.BATTERY] = "Battery";
+                modes[AuraMode.AUDIO] = "Audio Spectrum";
+                modes[AuraMode.AUDIOPULSE] = "Audio Pulse";
+
+                if (isStrixKb)
+                {
+                    modes[AuraMode.GRADIENT] = "Gradient";
+                    modes[AuraMode.ZONETEST] = "Zone Test";
+                }
             }
 
             return modes;
@@ -1144,7 +1152,7 @@ namespace GHelper.USB
         {
             if (!backlight || sessionLock) return;
 
-            var profile = Zenbook16XProfiles.Active();
+            var profile = Zenbook16XProfiles.Default();
 
             if (profile.Effect == CustomFrameMode.Static)
             {

@@ -18,9 +18,9 @@ re-deriving all of this.
 >   a clean state, or after any hardware effect was selected, streaming did nothing — which is
 >   exactly why every software-driven mode looked broken and got hidden.
 > - Sent **first** (now): confirmed live — set hardware Rainbow, let it animate, then enable +
->   stream solid red, and the red takes over immediately. Heatmap, GPU Mode, Ambient, Battery,
->   Audio, Audio Pulse, Gradient and Zone Test are all unhidden again; Zone Test, Gradient and
->   Ambient were re-confirmed live.
+>   stream solid red, and the red takes over immediately. Zone Test, Gradient and Ambient then
+>   rendered in a quick live test. (They were later hidden again pending proper per-mode work -
+>   see "Software-driven modes: current status" below.)
 >
 > The packet is not a guess: it appears verbatim in `AsusExclusiveAgent.exe`
 > (`mov dword [rsp+40h],0A25Ch` into a zeroed 64-byte buffer, call sites `0x1400239F7` and
@@ -42,7 +42,9 @@ re-deriving all of this.
 - Brightness (report `0x5A`, `[0x5A,0xBA,0xC5,0xC4,level]`, level 0-3) is confirmed working
   correctly (real dimming, not on/off) now that Static routes through the right channel.
 - Software-driven modes (Heatmap, GPU Mode, Ambient, Battery, Audio, AudioPulse, Gradient, Zone
-  Test) **now work** and are unhidden — see the update box above.
+  Test): the enable-packet blocker is fixed, but they are **hidden from the dropdown** on this
+  model until each is implemented and verified for it. GPU Mode and Battery have a separate bug.
+  See "Software-driven modes: current status" below.
 - A software-rendered **"Colour Rain"** per-key effect is implemented
   (`AuraMode.RAIN_COLOR`, `RainEffect` in `app/USB/Zenbook16X.cs`) and confirmed live end-to-end
   through the real `Aura.ApplyAura()` path.
@@ -229,8 +231,19 @@ It was never a timer, threading or `hidLock` problem. No logging was needed in t
 
 **Fix**: `Zenbook16X.DirectEnable()` is now called at the head of `ApplyZenbook16XDirect` and by
 `PerKeyEngine.Start`. Zone Test, Gradient and Ambient were re-confirmed live afterwards
-(distinct colour zones; a white-to-cyan blend; screen-tracking colour respectively), and all eight
-software modes are unhidden in `GetModes()`.
+(distinct colour zones; a white-to-cyan blend; screen-tracking colour respectively).
+
+### Software-driven modes: current status
+
+Fixing the enable packet removed the blocker they all shared, but "rendered once" is not "works",
+so all eight are **hidden from the dropdown on this model** (`AppConfig.IsZenbookPro16X()` guard in
+`GetModes()`) until each is done properly:
+
+| Mode | Status on the UX7602 |
+|---|---|
+| GPU Mode, Battery | **Cannot work as written.** Both bypass `ApplyDirect` and send the Strix `AuraMessage` on report `0x5D`, which this keyboard does not expose. Fix: route their colour through `ApplyDirect`, as Heatmap does. |
+| Heatmap, Audio Spectrum, Audio Pulse | Go through `ApplyDirect`, so should work — never tested here. |
+| Zone Test, Gradient, Ambient | Rendered in a quick test, but map the Strix 8-zone layout onto this keyboard rather than its real geometry. |
 
 ## Open question: real key/zone count (168 vs 164)
 
@@ -351,8 +364,9 @@ UAC prompts and time for zero data:
 
 ## Next steps (recommended)
 
-Items 1 and 2 from the previous version of this list are **done** — the software-driven modes are
-fixed (see "SOLVED" above) and the index layout is mapped (`docs/UX7602-LIGHTING.md`). What's left:
+Items 1 and 2 from the previous version of this list are **done** — the blocker behind the
+software-driven modes is fixed (see "SOLVED" above; the modes themselves are parked, per the
+status table there) and the index layout is mapped (`docs/UX7602-LIGHTING.md`). What's left:
 
 1. **Per-key control UI.** The streaming layer (`app/USB/Zenbook16X.cs`) and the effect framework
    (`PerKeyEffect` / `PerKeyEngine`) are in place; there is no UI for picking individual key
