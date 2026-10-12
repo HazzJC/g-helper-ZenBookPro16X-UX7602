@@ -1,132 +1,308 @@
-# G-Helper 16X
 
-**Keyboard lighting for the ASUS ZenBook Pro 16X OLED (UX7602)** — a fork of
-[seerge/g-helper](https://github.com/seerge/g-helper) that adds per-key RGB, both side lightbars
-and the lid logo to a laptop upstream doesn't light.
+## :sparkles: About this fork
 
-[**⬇ Download the latest release**](https://github.com/HazzJC/g-helper-16x/releases/latest)
+![ASUS ZenBook Pro 16X OLED Per-Key RGB Lighting and G-Helper Integration](docs/zenbook-lighting.png)
 
-![The per-key lighting editor: a top-down view of the keyboard with each row a different colour, both side lightbars in pink and the lid logo in green](docs/perkey-editor.png)
+This is a personal fork of [seerge/g-helper](https://github.com/seerge/g-helper) — all credit for
+the app itself goes to the original project, incredible tool. This fork exists solely to add support for keyboard individual level backlight control on my
+**ASUS ZenBook Pro 16X OLED (UX7602BZ / UX7602ZM)**, whose keyboard backlight, per-key RGB, side
+lightbars, and brightness controls aren't supported upstream by the current app. 
 
----
+Through live hardware testing and reverse-engineering of ASUS's own MyASUS software, this fork
+adds:
 
-## Why this fork exists
+- **Keyboard backlight brightness** — four real dimming levels, not just on/off
+- **A per-key lighting editor** — a top-down view of the keyboard where you click or drag to paint
+  individual keys, both side lightbars and the lid logo, with named profiles you can switch
+  between. Opens from the **Per-Key Lighting** button next to the keyboard mode dropdown.
+- **The lid logo in full RGB** — it's an addressable LED on the same bus as the keys, not the
+  on/off ACPI toggle it was assumed to be
+- **Hardware lighting effects** — Static, Breathing, Color Cycle, Rainbow, Strobe, Raindrop, Flash
+- **Colour Rain** — a multi-coloured per-key effect built on a small animation framework, so
+  further effects are a subclass and a few lines of wiring for future work 
 
-The UX7602's keyboard is a per-key RGB panel with two side lightbars and an RGB lid logo, and
-nothing outside MyASUS could drive it.
+  To do: 
+- **Software-driven effects** — Heatmap, GPU Mode, Ambient, Battery, Audio Spectrum, Audio Pulse,
+  Gradient and Zone Test are next implementation steps.
 
-Upstream G-Helper couldn't either, for a specific reason: its `IsVivoZenPro()` check matches any
-model containing `"Zenbook"`, and `IsDynamicLightingOnly()` separately matches any model
-containing `"UX760"`. Both are true of a `UX7602BZ`, so the app treated the laptop as an ACPI-only
-device driven by Windows Dynamic Lighting and never opened the USB HID interface the keyboard
-actually listens on.
+All of it is gated behind detection of this specific laptop model, so it has no effect on any
+other supported device. 
 
-Getting past that was the easy part. The protocol itself had to be reverse engineered from the
-hardware and from ASUS's own shipped binaries — see [the documentation](#documentation).
+# G-Helper - Lightweight control tool for Asus laptops
 
-## What it adds
+Small and lightweight Armoury Crate alternative for Asus laptops offering almost same functionality with a much smaller footprint. Works with all popular models, such as ROG Zephyrus G14, G15, G16, M16, X13, X16, Z13, DUO, TUF Series, Strix or Scar Series, ProArt, Vivobook, Zenbook, Expertbook, ROG Ally or Ally X and many more!
 
-| | |
-|---|---|
-| **Per-key editor** | Click or drag on a top-down picture of your keyboard to paint individual keys. Named profiles, a palette and colour picker, live preview. |
-| **Side lightbars** | Both bars, independently coloured. |
-| **Lid logo** | Full RGB, painted like any other key. |
-| **Brightness** | Four real dimming levels (0–3), not just on/off. |
-| **Hardware effects** | Static, Breathing, Color Cycle, Rainbow, Raindrop, Strobe, Flash — rendered by the keyboard's own controller. |
-| **Colour Rain** | Multi-coloured drops falling down the keys, splashing the lightbars. |
-| **Profile animations** | Breathe, Strobe or Sweep applied to a layout you painted — they change only its brightness, so your colours stay recognisable. |
+[![GitHub release](https://g-helper.com/badge/release.svg)](https://GitHub.com/seerge/g-helper/releases/)
+[![Downloads](https://g-helper.com/badge/downloads.svg)](https://GitHub.com/seerge/g-helper/releases/)
+[![SLSA3](https://g-helper.com/badge/slsa.svg)](https://github.com/seerge/g-helper/attestations)
+[![中文](https://g-helper.com/badge/lang-zh.svg)](https://github.com/seerge/g-helper/blob/main/docs/README.zh-CN.md)
+[![日本語](https://g-helper.com/badge/lang-ja.svg)](https://github.com/seerge/g-helper/blob/main/docs/README.ja-JP.md)
+[![Čeština](https://g-helper.com/badge/lang-cs.svg)](https://github.com/seerge/g-helper/blob/main/docs/README.cs-CZ.md)
+[![Español](https://g-helper.com/badge/lang-es.svg)](https://github.com/seerge/g-helper/blob/main/docs/README.es-ES.md)
+[![한국어](https://g-helper.com/badge/lang-ko.svg)](https://github.com/seerge/g-helper/blob/main/docs/README.ko-KR.md)
+<a href="https://github.com/seerge/g-helper/releases/latest/download/GHelper.exe" alt="G-Helper - Lightweight control tool for Asus laptops"><img width="1280" alt="G-Helper - Lightweight control tool for Asus laptops" src="https://raw.githubusercontent.com/seerge/g-helper/refs/heads/main/docs/app-hero.jpg" /></a>
 
-Everything is gated behind a model check, so this build behaves exactly like upstream G-Helper on
-any other laptop.
 
-## Install
+<a href="https://github.com/seerge/g-helper/releases/latest/download/GHelper.exe"><img width="250" alt="Download" src="https://g-helper.com/button/download.svg?lang=en" /></a> &nbsp; <a href="https://g-helper.com/support"><img width="250" alt="Donate" src="https://g-helper.com/button/donate.svg?lang=en" /></a>
 
-1. Download **GHelper.exe** from [the latest release](https://github.com/HazzJC/g-helper-16x/releases/latest).
-2. Run it. There's no installer, and nothing is written into your system beyond its own config.
+**⭐ Like the app? Help spread the word.**
 
-Needs the .NET 10 desktop runtime, same as upstream.
+- [FAQ](https://github.com/seerge/g-helper/wiki/FAQ)
+- [Setup and Requirements](https://github.com/seerge/g-helper/wiki/Requirements)
+- [Troubleshooting](https://github.com/seerge/g-helper/wiki/Troubleshooting)
+- [Power User Settings](https://github.com/seerge/g-helper/wiki/Power-user-settings)
 
-> **The binary is unsigned.** Upstream signs theirs with a certificate this fork doesn't have, so
-> SmartScreen will warn the first time ("More info" → "Run anyway"). If you'd rather not trust a
-> binary from a fork, build it yourself:
-> ```
-> dotnet publish app/GHelper.sln -c Release -r win-x64 -p:PublishSingleFile=true --no-self-contained
-> ```
+[![seerge/g-helper downloads](https://release-monitor.com/chart/seerge/g-helper.svg?range=month&stable=3)](https://release-monitor.com/#/seerge/g-helper)
 
-## Using the per-key editor
+[![United24](https://github.com/user-attachments/assets/aa9444e3-9daa-4b88-a473-7a7f855e3a07)](https://u24.gov.ua/)
 
-Open G-Helper and click **Per-Key Lighting**, next to the keyboard mode dropdown.
 
-- **Click or drag** a key to paint it; **right-click** to clear it. The lightbars and the lid logo
-  are painted the same way.
-- **Profiles** are saved as you go. **Save as profile…** takes a copy under a new name and can
-  make it the default in one step.
-- The **default** profile — marked ★ — is what your keyboard shows in *Custom (Per-Key)* mode.
-  It only changes when you say so, so browsing profiles in the editor never changes your lighting
-  by accident. Closing with **Save and close** makes the open profile the default; closing any
-  other way puts your previous lighting back.
-- **Effect** animates the layout you painted; **Speed** is 1–3 and **Brightness** 0–3, matching
-  the keyboard's own steps.
 
-## Known limitations
+### Documentation
 
-- **Tested on exactly one machine**: a `UX7602BZ` on firmware `X7602BZ.100`. The model check is a
-  plain `"UX7602"` substring match with no capability probing, so a `UX7602ZM` or a different
-  firmware revision would get the same commands, with unknown results.
-- **The side lightbars are one LED each** — a gradient along a bar isn't possible.
-- `Star`, `Highlight`, `Laser`, `Ripple` and `Comet` do nothing on this firmware, so they're
-  hidden rather than shown as broken options.
-- **MyASUS fights this app.** Its `AsusExclusiveAgent.exe` continuously re-streams its own
-  lighting. Close MyASUS if your lighting keeps reverting.
-- The binary is unsigned (above).
+- [`docs/UX7602-LIGHTING.md`](docs/UX7602-LIGHTING.md) — the reference: HID topology, every command on
+  report `0x5C`, the full LED slot map, and how it maps onto the code
+- [`HANDOVER.md`](HANDOVER.md) — what's confirmed working, what isn't, what changed and why,
+  and the compatibility risk for other UX7602 variants
+- [`FINDINGS.md`](FINDINGS.md) — working notes, reverse-engineering tooling, and the approaches
+  that were tried and abandoned
 
-### Not implemented yet
+This has only ever been tested on one physical unit (`UX7602BZ`, firmware `X7602BZ.100`). Claims
+in those documents are labelled by how they were actually verified — mostly by watching the
+physical keyboard respond to one isolated command at a time.
 
-G-Helper's software-driven modes — Heatmap, GPU Mode, Ambient, Battery, Audio Spectrum, Audio
-Pulse, Gradient and Zone Test — are hidden on this model until each is built for it. GPU Mode and
-Battery need the most work: they bypass the per-key path entirely and send a command meant for ROG
-Strix keyboards, which this one doesn't accept. Per-mode status is in
-[`FINDINGS.md`](FINDINGS.md).
+## :loudspeaker: YouTube Reviews and Guides
+| [![Youtube review Josh Cravey](https://i.ytimg.com/vi/hqe-PjuE-K8/hqdefault.jpg)](https://www.youtube.com/watch?v=hqe-PjuE-K8) | [![Youtube review Crimson Tech](https://i.ytimg.com/vi/5XUIMUzgHU0/hqdefault.jpg)](https://www.youtube.com/watch?v=5XUIMUzgHU0) | [![Youtube review cbutters Tech](https://i.ytimg.com/vi/6aVdwJKZSSc/hqdefault.jpg)](https://www.youtube.com/watch?v=6aVdwJKZSSc) |
+| ----------------- | ---------------- | ---------------- | 
+| [Josh Cravey](https://www.youtube.com/watch?v=hqe-PjuE-K8) | [Crimson Tech](https://www.youtube.com/watch?v=5XUIMUzgHU0) | [cbutters Tech](https://www.youtube.com/watch?v=6aVdwJKZSSc) | 
 
-## Documentation
+## 📰 Articles
+1. [Digital Trends](https://www.digitaltrends.com/computing/g-helper-armoury-crate-alternative/)
+2. [BinaryFork](https://binaryfork.com/ghelper-armoury-crate-alternative-10216/)
+3. [Ultrabookreview](https://www.ultrabookreview.com/71392-optimized-quiet-gaming-5080-5090/)
+4. [Notebookcheck](https://www.notebookcheck.net/Unbloated-G-Helper-The-best-open-source-alternative-to-Asus-Armoury-Crate-Part-2.1213486.0.html)
+5. [Les Numériques](https://www.lesnumeriques.com/appli-logiciel/marre-des-lenteurs-d-armoury-crate-sur-votre-pc-portable-asus-decouvrez-g-helper-l-alternative-ultra-legere-n240111.html)
 
-The protocol isn't published by ASUS, so it's all written down:
+## :gift: Advantages 
 
-- **[`docs/UX7602-LIGHTING.md`](docs/UX7602-LIGHTING.md)** — the reference. HID topology, every
-  command on report `0x5C`, the complete LED slot map, and how it maps onto the code.
-- **[`HANDOVER.md`](HANDOVER.md)** — what's confirmed working, what isn't, what changed relative
-  to upstream, and the compatibility risk for other UX7602 variants.
-- **[`FINDINGS.md`](FINDINGS.md)** — working notes, the reverse-engineering tooling, and the
-  approaches that were tried and abandoned.
+1. Seamless and automatic GPU switching
+2. All performance modes can be fully customized with power limits and fan curves
+3. Lightweight. Just a single exe to run. Doesn't install anything in your system. 
+4. Simple and clean native UI with easy access to all settings
+5. FN-Lock and custom hotkeys
 
-Claims in those documents are labelled by how they were actually verified. Most were confirmed by
-watching the physical keyboard respond to one isolated command at a time — a standard worth
-keeping, because an early pass on this fork shipped a "verified" checklist that had never been run
-and one of its guesses actively broke the feature.
+<img width="1960" alt="G-Helper Screenshot" src="https://github.com/user-attachments/assets/9376fe90-fbb6-420a-abbd-0186189665e1" />
 
-A couple of findings worth knowing if you're poking at this hardware yourself:
+### :zap: Features
 
-- The LED index space is a row-major matrix with a stride of 21: `slot = row * 21 + column`.
-- The lid logo is **slot 0** of that same buffer, in full RGB — not the boolean ACPI call it was
-  assumed to be.
-- `[0x5C, 0xA2, 0x00, 0x00]` is an **enable** packet that must precede a streamed frame. Sent
-  after the frame it blanks the keyboard; omitted entirely, host streaming silently does nothing
-  unless ASUS's agent happens to have already put the controller into the right mode.
+1. Performance modes: Silent - Balanced - Turbo (built-in, with default fan curves)
+2. GPU modes: Eco - Standard - Ultimate - Optimized
+3. Screen refresh rate control with display overdrive
+4. Custom fan curve editor, power limits and turbo boost selection for every performance mode
+5. Anime Matrix or Slash Lighting control including animated GIFs, clock and Audio visualizer
+6. RGB Backlight animation modes and colors 
+7. Hotkey handling
+8. Monitor CPU and GPU temperature, fan speeds and battery status
+9. Battery charge limit to preserve battery health
+10. NVidia GPU overclocking and undervolting
+11. XG Mobile Control
+12. AMD CPU Undervolting and temp limits
+13. BIOS and Driver Updates
+14. Asus Mice controls
+15. Mini-led multi-zone switch
+16. Flicker-free dimming and Visual Modes
 
-## Everything else
+### :gear: Automation
+- Performance Mode switching when on battery or plugged in
+- Optimized GPU mode - disables dGPU on battery and enables when plugged in
+- Auto Screen refresh rate (60Hz on battery and max Hz when plugged)
+- Keyboard backlight timeout on battery or when plugged in
 
-This is a complete G-Helper build — performance modes, GPU switching, fan curves, battery limits,
-hotkeys and the rest all work as usual. For those, read
-[the upstream documentation](https://github.com/seerge/g-helper) and
-[wiki](https://github.com/seerge/g-helper/wiki); the upstream readme is kept at
-[`docs/README.md`](docs/README.md).
+### :rocket: Performance Modes
+>[!NOTE]
+>All Modes are **baked into BIOS** along with default fan curves and power limits. And and they are the **same thing** as in the Armoury Crate.
 
-Currently merged up to upstream **0.287**. This fork versions itself **1.x**, which also keeps
-G-Helper's built-in updater from offering to "update" it to an upstream build that has no UX7602
-support.
+Each default BIOS mode is paired with matching [Windows Power Mode](https://support.microsoft.com/en-us/windows/change-the-power-mode-for-your-windows-pc-c2aff038-22c9-f46d-5ca0-78696fdf2de8). You can adjust this setting under ``Fans + Power``
 
-## Credit
+1. `Silent` in BIOS + `Best power efficiency` power mode
+2. `Balanced` (Performance in AC) in BIOS  + `Balanced` power mode
+3. `Turbo` in BIOS + `Best performance` power mode
 
-All credit for G-Helper itself goes to [seerge](https://github.com/seerge/g-helper) — it's an
-excellent tool, and this fork is a thin model-specific addition on top of it. Same
-[licence](LICENSE) as upstream.
+<img width="2330" alt="Performance Modes" src="https://github.com/user-attachments/assets/254d33eb-2af1-4715-a097-ed8678c7e9db" />
+
+### :video_game: GPU Tweaking
+
+In each mode dedicated GPU can be tweaked to specific needs, including Core and Memory Clock offsets, GPU power, Dynamic Boost, Temperature Limit etc
+<img width="2354" alt="GPU Tweaking" src="https://github.com/user-attachments/assets/48ce19a6-d149-40ed-9145-23f974c513f7" />
+
+### 💻 GPU Modes
+
+1. **Eco** : only low power integrated GPU enabled, iGPU drives built in display
+2. **Standard** (MS Hybrid) : iGPU and dGPU enabled, iGPU drives built in display
+3. **Ultimate**: iGPU and dGPU enabled, but dGPU drives built in display (supported on 2022+ models)
+4. **Optimized**: disables dGPU on battery (Eco) and enables when plugged in (Standard)
+
+<img width="1134" alt="GPU Modes" src="https://raw.githubusercontent.com/seerge/g-helper/main/docs/gpu-modes-en.svg" />
+
+### 💿Driver Updates
+The app includes an automatic BIOS and driver update checker that pulls directly from the official Asus website for your specific model, highlighting new downloads as they become available. All links in the `Updates` section point to official Asus downloads.
+<img width="2302" alt="Driver Updates" src="https://github.com/user-attachments/assets/303dfce9-fbbd-4d15-b6d7-f21e7c2c59a4" />
+
+### 🎮 Metrics Overlay
+A built-in in-game overlay (OSD) that shows live **FPS, CPU / GPU temperatures, usage and power** right on top of your game - no extra tools needed. Works in DX10+ games. May not be visible over old titles that use exclusive full-screen mode, so set the game to windowed / borderless full-screen mode.
+
+- ``Ctrl + Shift + Alt + O`` - Toggle in-game overlay ON / OFF
+- ``Ctrl + Shift + Alt + Mouse Drag`` - Move overlay
+- ``Ctrl + Shift + Alt + Mouse Click`` - Switch mode (Light / Default / Full / Complete)
+- ``Ctrl + Shift + Alt + Wheel`` - Resize overlay
+- ``Ctrl + Shift + Alt + Wheel Click`` - Reset overlay size
+
+<img width="1690" alt="Metrics Overlay" src="https://github.com/user-attachments/assets/0752a704-e9a7-4e27-8587-39967f625fae" />
+<img width="3840" alt="Metrics Overlay in a game" src="https://github.com/user-attachments/assets/8b063f80-d508-41e0-9978-154bc936d451" />
+
+### :mouse: Asus Mouse and other peripherals support
+
+<details>
+<summary><a href="https://github.com/seerge/g-helper/discussions/900">Currently supported models</a> (click to expand)</summary>
+
+- ROG Chakram
+- ROG Chakram X
+- ROG Chakram Core
+- ROG Gladius II and Gladius II Origin (+ PNK LTD / COD editions)
+- ROG Gladius II Wireless
+- ROG Gladius III
+- ROG Gladius III Wireless
+- ROG Gladius III Aimpoint Wireless (+ EVA-02 Edition)
+- ROG Harpe Ace Extreme
+- ROG Harpe Ace Aim Lab Edition
+- ROG Harpe Ace Mini
+- ROG Harpe II Ace
+- ROG Harpe II Extreme Edition 20
+- ROG Keris and Keris Wireless (+ EVA Edition)
+- ROG Keris Wireless Aimpoint
+- ROG Keris II Ace
+- ROG Keris II Origin (+ KJP edition)
+- ROG Pugio
+- ROG Pugio II
+- ROG Spatha X
+- ROG Strix Carry
+- ROG Strix Evolve
+- ROG Strix Impact
+- ROG Strix Impact II (+ Electro Punk / Moonlight White editions)
+- ROG Strix Impact II Wireless
+- ROG Strix Impact III
+- ROG Strix Impact III Wireless
+- TUF Gaming M3
+- TUF Gaming M3 Gen II
+- TUF Gaming M4 Wireless
+- TUF Gaming M4 AIR
+- TUF Gaming M5
+- TUF Gaming Mini Miku Edition
+- TX Gaming Mouse
+- TX Gaming Mouse Mini
+- ASUS MD200
+
+</details>
+
+Huge thanks to [@IceStormNG](https://github.com/IceStormNG) 👑 for contribution and research (!).
+
+<img width="2448" alt="Mouse and other peripherals" src="https://github.com/user-attachments/assets/fe2a766b-f514-42e9-8dff-4bcc915364d4" />
+
+### :keyboard: Asus Keyboards support
+
+<details>
+<summary><a href="https://github.com/seerge/g-helper/discussions/5710">Currently supported models</a> (click to expand)</summary>
+
+- ROG Azoth
+- ROG Azoth Extreme
+- ROG Azoth Extreme SE
+- ROG Azoth X
+- ROG Claymore II
+- ROG Falchion
+- ROG Falchion Ace
+- ROG Falchion Ace HFX
+- ROG Falchion RX
+- ROG Falchion RX Low Profile
+- ROG Strix Flare
+- ROG Strix Flare COD
+- ROG Strix Flare II
+- ROG Strix Flare II Animate
+- ROG Strix Flare PNK LTD
+- ROG Strix Scope II
+- ROG Strix Scope II RX
+- ROG Strix Scope II 96
+- ROG Strix Scope II 96 RX
+- ROG Strix Scope RX
+- ROG Strix Scope RX EVA Edition
+- ROG Strix Scope RX EVA-02 Edition
+- ROG Strix Scope RX TKL
+- TUF Gaming K1
+- TUF Gaming K3
+- TUF Gaming K3 Gen II
+
+</details>
+
+<img width="2254" alt="Keyboards" src="https://github.com/user-attachments/assets/9da4116f-7fb1-4dae-ac3e-25f0f1266a74" />
+
+### ⌨️ Keybindings
+
+- ``Fn + F5 / Fn + Shift + F5`` - Toggle Performance Modes forwards / backwards
+- ``Ctrl + Shift + F5 / Ctrl + Shift + Alt + F5`` - Toggle Performance Modes forwards / backwards
+- ``Ctrl + Shift + F12`` - Open G-Helper window
+- ``Ctrl + M1 / M2`` - Screen brightness Down / Up
+- ``Shift + M1 / M2`` - Backlight brightness Down / Up
+- ``Fn + V`` - Visual Modes
+- ``Fn + C`` / ``Fn + Esc`` - Fn-Lock
+- ``Fn + Ctrl +  F7 / F8`` / ``Ctrl + Shift + Alt +  F7 / F8`` - Flicker-free dimming Down / Up
+- ``Fn + Shift + F7 / F8`` - Matrix / Slash Lighting brightness Down / Up
+- ``Fn + Shift + F7 / F8`` / ``Ctrl + Shift + Alt +  F7 / F8`` - Screenpad brightness Down / Up
+- ``Ctrl + Shift + F20`` - Mute Microphone
+- ``Ctrl + Shift + Alt + F13`` - Toggle Display Refresh Rate
+- ``Ctrl + Shift + Alt + F14`` - Eco GPU Mode
+- ``Ctrl + Shift + Alt + F15`` - Standard GPU Mode
+- ``Ctrl + Shift + Alt + F16`` - Silent
+- ``Ctrl + Shift + Alt + F17`` - Balanced
+- ``Ctrl + Shift + Alt + F18`` - Turbo
+- ``Ctrl + Shift + Alt + F19`` - Custom 1 (if exists)
+- ``Ctrl + Shift + Alt + F20`` - Custom 2 (if exists)
+- [Custom keybindings / hotkeys](https://github.com/seerge/g-helper/wiki/Power-user-settings#custom-hotkey-actions)
+
+### 🎮ROG Ally Bindings
+- ``M + DPad Left / Right`` - Display Brightness
+- ``M + DPad Up`` - Touch keyboard
+- ``M + DPad Down`` - Show desktop
+- ``M + Y`` - Toggle AMD overay
+- ``M + X`` - Screenshot
+- ``M + Right Stick Click`` - Controller Mode
+
+------------------
+
+> [!NOTE]
+> ### 🔖 Important Notice
+> G-Helper is **NOT** an operating system, firmware, or driver. It **DOES NOT** "run" your hardware in real-time anyhow.
+> 
+> It's an app that lets you select one of the predefined operating modes created by manufacturer (and stored in BIOS) and optionally(!) set some settings that already exist on your device same as Armoury Crate can. It does it by using the Asus System Control Interface "driver" that Armoury uses for it.
+> 
+> If you use equivalent mode/settings as in Armoury Crate - the performance or the behavior of your device won't be different.
+> 
+> The role of G-Helper for your laptop is similar to the role of a remote control for your TV.
+
+### Libraries and projects used
+- [Linux Kernel](https://github.com/torvalds/linux/blob/master/include/linux/platform_data/x86/asus-wmi.h) for some basic endpoints in ASUS ACPI/WMI interface
+- [NvAPIWrapper](https://github.com/falahati/NvAPIWrapper) for accessing Nvidia API
+- [Starlight](https://github.com/vddCore/Starlight) for anime matrix communication protocol
+- [UXTU](https://github.com/JamesCJ60/Universal-x86-Tuning-Utility) for undervolting endpoints using Ryzen SMU
+- [PawnIO](https://github.com/namazso/PawnIO) for access to RyzenSMU
+- [AsusCtl](https://gitlab.com/asus-linux/asusctl) for inspiration and some reverse engineering
+- [OpenRGB](https://gitlab.com/CalcProgrammer1/OpenRGB) for some RGB protocol details for external keyboards support
+
+### Code Signing Policy
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/)
+
+### Privacy Policy
+This program will not transfer any information to other networked systems
+
+### Disclaimers
+"Asus", "ROG", "TUF", and "Armoury Crate" are trademarked by and belong to AsusTek Computer, Inc. I make no claims to these or any assets belonging to AsusTek Computer and use them purely for informational purposes only.
+
+THE SOFTWARE IS PROVIDED “AS IS” AND WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. MISUSE OF THIS SOFTWARE COULD CAUSE SYSTEM INSTABILITY OR MALFUNCTION.
