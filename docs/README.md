@@ -1,30 +1,6 @@
-
-## :sparkles: About this fork
-
-This is a personal fork of [seerge/g-helper](https://github.com/seerge/g-helper) — all credit for
-the app itself goes to the original project, incredible tool. This fork exists solely to add support for keyboard individual level backlight control on my
-**ASUS ZenBook Pro 16X OLED (UX7602BZ / UX7602ZM)**, whose keyboard backlight, per-key RGB, side
-lightbars, and brightness controls aren't supported upstream by the current app. 
-
-Through live hardware testing and reverse-engineering of ASUS's own MyASUS software, this fork
-adds:
-
-- **Keyboard backlight brightness** — four real dimming levels, not just on/off
-- **A per-key lighting editor** — a top-down view of the keyboard where you click or drag to paint
-  individual keys, both side lightbars and the lid logo, with named profiles you can switch
-  between. Opens from the **Per-Key Lighting** button next to the keyboard mode dropdown.
-- **The lid logo in full RGB** — it's an addressable LED on the same bus as the keys, not the
-  on/off ACPI toggle it was assumed to be
-- **Hardware lighting effects** — Static, Breathing, Color Cycle, Rainbow, Strobe, Raindrop, Flash
-- **Colour Rain** — a multi-coloured per-key effect built on a small animation framework, so
-  further effects are a subclass and a few lines of wiring for future work 
-
-  To do: 
-- **Software-driven effects** — Heatmap, GPU Mode, Ambient, Battery, Audio Spectrum, Audio Pulse,
-  Gradient and Zone Test are next implementation steps.
-
-All of it is gated behind detection of this specific laptop model, so it has no effect on any
-other supported device. 
+> **This is the upstream G-Helper readme.** For the ZenBook Pro 16X OLED (UX7602)
+> lighting support this fork adds, see
+> [the fork readme](https://github.com/HazzJC/g-helper-16x#readme).
 
 # G-Helper - Lightweight control tool for Asus laptops
 
@@ -55,19 +31,6 @@ Small and lightweight Armoury Crate alternative for Asus laptops offering almost
 [![United24](https://github.com/user-attachments/assets/aa9444e3-9daa-4b88-a473-7a7f855e3a07)](https://u24.gov.ua/)
 
 
-
-### Documentation
-
-- [`docs/UX7602-LIGHTING.md`](UX7602-LIGHTING.md) — the reference: HID topology, every command on
-  report `0x5C`, the full LED slot map, and how it maps onto the code
-- [`HANDOVER.md`](../HANDOVER.md) — what's confirmed working, what isn't, what changed and why,
-  and the compatibility risk for other UX7602 variants
-- [`FINDINGS.md`](../FINDINGS.md) — working notes, reverse-engineering tooling, and the approaches
-  that were tried and abandoned
-
-This has only ever been tested on one physical unit (`UX7602BZ`, firmware `X7602BZ.100`). Claims
-in those documents are labelled by how they were actually verified — mostly by watching the
-physical keyboard respond to one isolated command at a time.
 
 ## :loudspeaker: YouTube Reviews and Guides
 | [![Youtube review Josh Cravey](https://i.ytimg.com/vi/hqe-PjuE-K8/hqdefault.jpg)](https://www.youtube.com/watch?v=hqe-PjuE-K8) | [![Youtube review Crimson Tech](https://i.ytimg.com/vi/5XUIMUzgHU0/hqdefault.jpg)](https://www.youtube.com/watch?v=5XUIMUzgHU0) | [![Youtube review cbutters Tech](https://i.ytimg.com/vi/6aVdwJKZSSc/hqdefault.jpg)](https://www.youtube.com/watch?v=6aVdwJKZSSc) |
