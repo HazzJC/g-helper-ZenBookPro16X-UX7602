@@ -379,6 +379,11 @@ public static class AppConfig
         return Is("keyboard_aura_sync");
     }
 
+    public static bool IsHeadsetAuraSync()
+    {
+        return Is("headset_aura_sync");
+    }
+
     public static bool NoMKeys()
     {
         return (ContainsModel("Z13") && !IsARCNM()) ||
@@ -514,7 +519,7 @@ public static class AppConfig
 
     public static bool IsEcoBootFix()
     {
-        return ContainsModel("G635L") || ContainsModel("G615L") || ContainsModel("G835L") || ContainsModel("G815L") || ContainsModel("FA506");
+        return ContainsModel("G635L") || ContainsModel("G615L") || ContainsModel("G835L") || ContainsModel("G815L") || ContainsModel("FA506") || ContainsModel("FX608");
     }
 
     public static bool IsELMB()
@@ -574,7 +579,7 @@ public static class AppConfig
 
     public static bool IsDetachableKeyboard()
     {
-        return ContainsModel("Z13") || ContainsModel("UX8407");
+        return ContainsModel("Z13") || ContainsModel("UX8406") || ContainsModel("UX8407");
     }
 
     public static bool HasRearLight()
@@ -656,7 +661,7 @@ public static class AppConfig
 
     public static bool IsCPULight()
     {
-        return ContainsModel("GA402X") || ContainsModel("GA605") || ContainsModel("GA403") || ContainsModel("FA507N") || ContainsModel("FA507X") || ContainsModel("FA707N") || ContainsModel("FA707X") || ContainsModel("GZ302") || ContainsModel("GU405") || ContainsModel("GX651");
+        return ContainsModel("GA402X") || ContainsModel("GA605") || ContainsModel("GA403") || ContainsModel("FA507N") || GetModelShort().Contains("FA507X") || ContainsModel("FA707N") || ContainsModel("FA707X") || ContainsModel("GZ302") || ContainsModel("GU405") || ContainsModel("GX651");
     }
 
     public static bool IsPowerRequired()
@@ -769,7 +774,7 @@ public static class AppConfig
 
     public static bool IsChargeLimit6080()
     {
-        return ContainsModel("GU405") || ContainsModel("GU606") || ContainsModel("H760") || ContainsModel("GA403") || ContainsModel("GU605") || ContainsModel("GA605") || ContainsModel("GA503R") || (IsTUF() && !(ContainsModel("FX507Z") || ContainsModel("FA617") || ContainsModel("FA607")));
+        return ContainsModel("GU405") || ContainsModel("GU606") || ContainsModel("H760") || ContainsModel("GA403") || ContainsModel("GU605") || ContainsModel("GA605") || ContainsModel("GA503R") || (IsTUF() && !(ContainsModel("FX507Z") || ContainsModel("FA617") || ContainsModel("FA607") || ContainsModel("FX607")));
 
     }
 
