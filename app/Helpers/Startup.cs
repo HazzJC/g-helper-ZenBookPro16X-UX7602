@@ -143,6 +143,10 @@ public class Startup
 
         if (strExeFilePath is null) return;
 
+        // The charge task runs as SYSTEM, which only an elevated process may register.
+        // Without this guard every non-admin launch logs "Access is denied" and retries.
+        if (!ProcessHelper.IsUserAdministrator()) return;
+
         using (TaskDefinition td = TaskService.Instance.NewTask())
         {
             td.RegistrationInfo.Description = "G-Helper Charge Limit";

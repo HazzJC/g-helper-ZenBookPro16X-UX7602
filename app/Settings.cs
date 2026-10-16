@@ -914,6 +914,17 @@ namespace GHelper
 
             contextMenuStrip.Items.Add("-");
 
+            var menuStartup = new ToolStripMenuItem(Properties.Strings.RunOnStartup);
+            menuStartup.Margin = padding;
+            menuStartup.Checked = Startup.IsScheduled();
+            menuStartup.Click += (sender, args) =>
+            {
+                // Drive the settings checkbox so both stay in step; its handler does the scheduling.
+                checkStartup.Checked = !checkStartup.Checked;
+                menuStartup.Checked = Startup.IsScheduled();
+            };
+            contextMenuStrip.Items.Add(menuStartup);
+
             var menuOverlay = new ToolStripMenuItem(Properties.Strings.Overlay);
             menuOverlay.Click += (sender, args) => ToggleOverlay();
             menuOverlay.Margin = padding;
@@ -1263,7 +1274,7 @@ namespace GHelper
             Aura.SetColor(AppConfig.Get("aura_color"));
             Aura.SetColor2(AppConfig.Get("aura_color2"));
 
-            comboKeyboard.DataSource = new BindingSource(Aura.GetModes(), null);
+            comboKeyboard.DataSource = new BindingSource(VisibleKeyboardModes(), null);
             comboKeyboard.DisplayMember = "Value";
             comboKeyboard.ValueMember = "Key";
             comboKeyboard.SelectedValue = Aura.Mode;
@@ -1402,10 +1413,8 @@ namespace GHelper
                 BeginInvoke(SyncAuraMode);
                 return;
             }
-
-            comboKeyboard.SelectedValueChanged -= ComboKeyboard_SelectedValueChanged;
-            try { comboKeyboard.SelectedValue = (AuraMode)AppConfig.Get("aura_mode"); }
-            finally { comboKeyboard.SelectedValueChanged += ComboKeyboard_SelectedValueChanged; }
+            // The active mode is always kept in the list, so rebuilding it also covers a hidden mode becoming active.
+            RefreshKeyboardModes();
         }
 
         /// <summary>
@@ -1416,21 +1425,73 @@ namespace GHelper
         {
             if (!AppConfig.IsZenbookPro16X()) return;
 
-            buttonPerKey = new RButton
+            RButton Make(string text, Action onClick)
             {
-                Text = "Per-Key Lighting",
-                Dock = DockStyle.Top,
-                FlatStyle = FlatStyle.Flat,
-                Height = comboKeyboard.Height,
-                Margin = comboKeyboard.Margin,
-                BorderRadius = 2,
-            };
-            buttonPerKey.Click += (_, _) => ShowPerKeyEditor();
+                var button = new RButton
+                {
+                    Text = text,
+                    Dock = DockStyle.Top,
+                    FlatStyle = FlatStyle.Flat,
+                    Height = comboKeyboard.Height,
+                    Margin = comboKeyboard.Margin,
+                    BorderRadius = 2,
+                };
+                button.Click += (_, _) => onClick();
+                return button;
+            }
 
-            tableLayoutKeyboard.Controls.Add(buttonPerKey, 1, 0);
+            // Two direct buttons beside the mode dropdown: the Studio (modes, palettes, hiding) and
+            // the per-key editor, which stays one click away rather than living inside the Studio.
+            buttonPerKey = Make("Per-Key Editor", ShowPerKeyEditor);
+            tableLayoutKeyboard.Controls.Add(Make("Lighting Studio", ShowStudio), 1, 0);
+            tableLayoutKeyboard.Controls.Add(buttonPerKey, 2, 0);
 
-            // InitAura runs after the form's own InitTheme, so this control needs theming itself.
+            // InitAura runs after the form's own InitTheme, so these controls need theming themselves.
             ControlHelper.Adjust(this);
+        }
+
+        private Dictionary<AuraMode, string> VisibleKeyboardModes()
+        {
+            var all = Aura.GetModes();
+            return AppConfig.IsZenbookPro16X()
+                ? Zenbook16XSettings.VisibleModes(all, (AuraMode)AppConfig.Get("aura_mode"))
+                : all;
+        }
+
+        /// <summary>Rebuilds the keyboard dropdown after modes are shown or hidden in the Lighting Studio.</summary>
+        public void RefreshKeyboardModes()
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(RefreshKeyboardModes);
+                return;
+            }
+
+            comboKeyboard.SelectedValueChanged -= ComboKeyboard_SelectedValueChanged;
+            try
+            {
+                comboKeyboard.DataSource = new BindingSource(VisibleKeyboardModes(), null);
+                comboKeyboard.DisplayMember = "Value";
+                comboKeyboard.ValueMember = "Key";
+                comboKeyboard.SelectedValue = (AuraMode)AppConfig.Get("aura_mode");
+            }
+            finally { comboKeyboard.SelectedValueChanged += ComboKeyboard_SelectedValueChanged; }
+        }
+
+        private Zenbook16XStudio? studio;
+
+        public void ShowStudio()
+        {
+            if (studio is not null && !studio.IsDisposed)
+            {
+                studio.Activate();
+                return;
+            }
+
+            studio = new Zenbook16XStudio();
+            studio.TopMost = AppConfig.Is("topmost");
+            studio.FormClosed += (_, _) => studio = null;
+            studio.Show();
         }
 
         public void ShowPerKeyEditor()

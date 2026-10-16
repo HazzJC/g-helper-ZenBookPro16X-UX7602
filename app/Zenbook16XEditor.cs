@@ -66,7 +66,7 @@ namespace GHelper
             // so anything set beforehand gets multiplied and can end up wider than the screen.
             var work = Screen.FromPoint(Cursor.Position).WorkingArea;
             int width = Math.Min((int)(work.Width * 0.86), 1440);
-            int height = Math.Min((int)(width / 2.35) + 210, (int)(work.Height * 0.92));
+            int height = Math.Min((int)(width / 2.35) + 230, (int)(work.Height * 0.92));
             ClientSize = new Size(width, height);
             Location = new Point(work.X + (work.Width - Width) / 2, work.Y + (work.Height - Height) / 2);
 
@@ -133,7 +133,7 @@ namespace GHelper
 
         Control BuildProfileBar()
         {
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
+            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
 
             bar.Controls.Add(Caption("Profile", 7));
 
@@ -159,7 +159,7 @@ namespace GHelper
 
         Control BuildPaletteBar()
         {
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
+            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
 
             foreach (var color in Palette)
             {
@@ -199,7 +199,7 @@ namespace GHelper
             {
                 Dock = DockStyle.Fill,
                 AutoSize = true,
-                WrapContents = false,
+                WrapContents = true,
                 Padding = new Padding(0, 8, 0, 0),
             };
 

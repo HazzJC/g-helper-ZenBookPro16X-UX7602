@@ -60,6 +60,11 @@ namespace GHelper.USB
         AUDIOPULSE = 27,
         RAIN_COLOR = 28,
         CUSTOM_PERKEY = 29,
+        AURORA = 30,
+        LAVA = 31,
+        SONAR = 32,
+        FIREFLIES = 33,
+        EMBER = 34,
     }
 
     public enum AuraSpeed : int
@@ -214,6 +219,7 @@ namespace GHelper.USB
             {
                 modes[AuraMode.RAIN_COLOR] = "Colour Rain";
                 modes[AuraMode.CUSTOM_PERKEY] = "Custom (Per-Key)";
+                foreach (var preset in Zenbook16XEffects.All) modes[preset] = Zenbook16XEffects.Name(preset);
             }
 
             if (isAlly)
@@ -473,7 +479,7 @@ namespace GHelper.USB
             {
                 if (!backlight) initDirect = true;
                 backlight = true;
-                if (Mode == AuraMode.GRADIENT || Mode == AuraMode.RAIN_COLOR || Mode == AuraMode.CUSTOM_PERKEY) ApplyAura();
+                if (Mode == AuraMode.GRADIENT || Zenbook16XEffects.IsPreset(Mode)) ApplyAura();
             }
 
         }
@@ -1082,15 +1088,17 @@ namespace GHelper.USB
                 return;
             }
 
-            if (Mode == AuraMode.RAIN_COLOR)
-            {
-                StartRain();
-                return;
-            }
 
             if (Mode == AuraMode.CUSTOM_PERKEY)
             {
                 ApplyCustomPerKey();
+                return;
+            }
+
+            var preset = AppConfig.IsZenbookPro16X() ? Zenbook16XEffects.Create(Mode) : null;
+            if (preset != null)
+            {
+                if (backlight && !sessionLock) PerKeyEngine.Start(preset);
                 return;
             }
 
@@ -1154,25 +1162,6 @@ namespace GHelper.USB
 
             ApplyRearLight();
 
-        }
-
-        /// <summary>
-        /// Starts the software-rendered rain effect. Drop pace comes from the Aura speed setting;
-        /// drop colours are sampled from a palette spanning the two Aura colours.
-        /// </summary>
-        private static void StartRain()
-        {
-            if (!backlight || sessionLock) return;
-
-            (double rate, double min, double max) = Speed switch
-            {
-                AuraSpeed.Slow => (3.5, 2.0, 3.5),
-                AuraSpeed.Fast => (10.0, 5.0, 9.0),
-                _ => (6.0, 3.0, 5.5),
-            };
-
-            var palette = RainEffect.PaletteFromColors(Color1, Color2);
-            PerKeyEngine.Start(new RainEffect(palette, rate, min, max));
         }
 
         /// <summary>
