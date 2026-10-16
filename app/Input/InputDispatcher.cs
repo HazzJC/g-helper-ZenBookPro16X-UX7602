@@ -627,8 +627,26 @@ namespace GHelper.Input
                     action = "calculator";
             }
 
+            RunAction(action, name);
+        }
+
+        // runs a named action; `name` is only needed by "custom" (its command lives under <name>_custom in the config)
+        public static void RunAction(string? action, string name = "")
+        {
             switch (action)
             {
+                case "scroll_up":
+                    KeyboardHook.mouse_event(0x0800, 0, 0, 120, 0);
+                    break;
+                case "scroll_down":
+                    KeyboardHook.mouse_event(0x0800, 0, 0, unchecked((uint)-120), 0);
+                    break;
+                case "performance_back":
+                    modeControl.CyclePerformanceMode(true);
+                    break;
+                case "aura_back":
+                    Program.settingsForm.BeginInvoke(Program.settingsForm.CycleAuraMode, -1);
+                    break;
                 case "mute":
                     KeyboardHook.KeyPress(Keys.VolumeMute);
                     break;
@@ -646,6 +664,12 @@ namespace GHelper.Input
                     break;
                 case "play":
                     KeyboardHook.KeyPress(Keys.MediaPlayPause);
+                    break;
+                case "next_track":
+                    KeyboardHook.KeyPress(Keys.MediaNextTrack);
+                    break;
+                case "prev_track":
+                    KeyboardHook.KeyPress(Keys.MediaPreviousTrack);
                     break;
                 case "screenshot":
                     KeyboardHook.KeyPress(Keys.Snapshot);

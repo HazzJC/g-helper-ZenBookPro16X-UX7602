@@ -108,6 +108,13 @@ public static class ControlHelper
                 rText.ApplyTheme(_darkMode);
             }
 
+            if (control is CheckedListBox clb)
+            {
+                clb.BackColor = RForm.buttonMain;
+                clb.ForeColor = RForm.foreMain;
+                clb.BorderStyle = BorderStyle.FixedSingle;
+            }
+
             var gb = control as GroupBox;
             if (gb != null)
             {

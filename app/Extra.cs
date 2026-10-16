@@ -37,6 +37,8 @@ namespace GHelper
               {"mute", Properties.Strings.VolumeMute},
               {"screenshot", Properties.Strings.PrintScreen},
               {"play", Properties.Strings.PlayPause},
+              {"next_track", "Next track"},
+              {"prev_track", "Previous track"},
               {"aura", Properties.Strings.ToggleAura},
               {"performance", Properties.Strings.PerformanceMode},
               {"screen", Properties.Strings.ToggleScreen},
@@ -137,6 +139,146 @@ namespace GHelper
             txbox.TextChanged += delegate
             {
                 AppConfig.Set(name + "_custom", txbox.Text);
+            };
+        }
+
+        // The form is authored at 192 DPI and auto-scaled when it is shown, but controls created in code after
+        // InitializeComponent are not, so size them from the current DPI (same baseline as the designer values).
+        private int Dpx(int designerPx) => (int)Math.Round(designerPx * DeviceDpi / 192f);
+
+        // Dial modes: press cycles through the ticked modes, turning adjusts the current one
+        private void AddDialModePicker(List<ComboBox> modeBound)
+        {
+            int row = tableBindings.RowCount++;
+            tableBindings.RowStyles.Add(new RowStyle());
+
+            var panel = new TableLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2, Anchor = AnchorStyles.Left | AnchorStyles.Top, Margin = new Padding(0, Dpx(8), 0, Dpx(3)) };
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+            var checkModes = new CheckBox { AutoSize = true, Margin = new Padding(Dpx(5), Dpx(3), 0, Dpx(3)), Text = "Dial modes: press switches, turn adjusts", Checked = AppConfig.Is("dial_modes_on"), AccessibleName = "Dial modes" };
+            var list = new CheckedListBox { CheckOnClick = true, IntegralHeight = false, Width = Dpx(420), Margin = new Padding(Dpx(25), Dpx(3), Dpx(5), Dpx(3)), AccessibleName = "Dial modes in order" };
+            var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Margin = new Padding(0, Dpx(3), 0, Dpx(3)) };
+            var buttonUp = new RButton { Text = "Move up", AutoSize = false, Size = new Size(Dpx(170), Dpx(46)), Margin = new Padding(Dpx(5), Dpx(3), Dpx(5), Dpx(3)), AccessibleName = "Move dial mode up" };
+            var buttonDown = new RButton { Text = "Move down", AutoSize = false, Size = buttonUp.Size, Margin = buttonUp.Margin, AccessibleName = "Move dial mode down" };
+            buttons.Controls.Add(buttonUp);
+            buttons.Controls.Add(buttonDown);
+
+            panel.Controls.Add(checkModes, 0, 0);
+            panel.SetColumnSpan(checkModes, 2);
+            panel.Controls.Add(list, 0, 1);
+            panel.Controls.Add(buttons, 1, 1);
+
+            tableBindings.Controls.Add(panel, 0, row);
+            tableBindings.SetColumnSpan(panel, 3);
+
+            bool loading = true;
+
+            void Save()
+            {
+                if (loading) return;
+                var ids = list.Items.Cast<DialMode>().Where((m, i) => list.GetItemChecked(i)).Select(m => m.Id);
+                DialModes.Save(ids);
+            }
+
+            void UpdateEnabled()
+            {
+                list.Enabled = buttonUp.Enabled = buttonDown.Enabled = checkModes.Checked;
+                foreach (var combo in modeBound) combo.Enabled = !checkModes.Checked;
+            }
+
+            list.DisplayMember = nameof(DialMode.Name);
+            foreach (var (mode, enabled) in DialModes.ForPicker())
+                list.SetItemChecked(list.Items.Add(mode), enabled);
+            // show every mode without a scrollbar; item height is only final once the control has its handle and scaled font
+            void FitList() => list.Height = list.ItemHeight * list.Items.Count + Dpx(10);
+            FitList();
+            list.HandleCreated += delegate { FitList(); };
+            list.FontChanged += delegate { FitList(); };
+            loading = false;
+            UpdateEnabled();
+
+            list.ItemCheck += delegate { BeginInvoke(Save); };   // checked state is applied after the event
+            checkModes.CheckedChanged += delegate
+            {
+                AppConfig.Set("dial_modes_on", checkModes.Checked ? 1 : 0);
+                UpdateEnabled();
+            };
+
+            void Move(int delta)
+            {
+                int i = list.SelectedIndex, j = i + delta;
+                if (i < 0 || j < 0 || j >= list.Items.Count) return;
+                var item = list.Items[i];
+                bool isChecked = list.GetItemChecked(i);
+                loading = true;
+                list.Items.RemoveAt(i);
+                list.Items.Insert(j, item);
+                list.SetItemChecked(j, isChecked);
+                list.SelectedIndex = j;
+                loading = false;
+                Save();
+            }
+
+            buttonUp.Click += delegate { Move(-1); };
+            buttonDown.Click += delegate { Move(1); };
+        }
+
+        // ASUS Dial (ZenBook Pro 16X): a heading, one binding row per dial gesture, dial modes, and the ASUS takeover option
+        private void AddDialBindings()
+        {
+            var rows = new (string key, string title)[]
+            {
+                ("dial_cw", "Dial right:"),
+                ("dial_ccw", "Dial left:"),
+                ("dial_press", "Dial press:"),
+                ("dial_double", "Dial double:"),
+                ("dial_long", "Dial hold:"),
+            };
+
+            int headingRow = tableBindings.RowCount++;
+            tableBindings.RowStyles.Add(new RowStyle());
+            var heading = new Label { AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, Dpx(10), 0, 0), Padding = new Padding(Dpx(5), Dpx(11), 0, 0), Text = "ASUS Dial" };
+            tableBindings.Controls.Add(heading, 0, headingRow);
+            tableBindings.SetColumnSpan(heading, 3);
+
+            var modeBound = new List<ComboBox>();   // bindings that dial modes take over while enabled
+
+            foreach (var (key, title) in rows)
+            {
+                int row = tableBindings.RowCount++;
+                tableBindings.RowStyles.Add(new RowStyle());
+
+                var label = new Label { AutoSize = true, Margin = new Padding(0), Padding = new Padding(Dpx(5), Dpx(11), 0, 0), Text = title };
+                var combo = new RComboBox { Dock = DockStyle.Top, FormattingEnabled = true, Margin = new Padding(Dpx(5), Dpx(3), Dpx(5), Dpx(3)), BorderColor = Color.White, ButtonColor = Color.FromArgb(255, 255, 255), AccessibleName = title };
+                var text = new RTextBox { Dock = DockStyle.Top, Margin = new Padding(Dpx(5), Dpx(3), Dpx(5), Dpx(3)), PlaceholderText = "action", TabStop = false };
+
+                tableBindings.Controls.Add(label, 0, row);
+                tableBindings.Controls.Add(combo, 1, row);
+                tableBindings.Controls.Add(text, 2, row);
+
+                SetKeyCombo(combo, text, key);
+                if (key is "dial_cw" or "dial_ccw" or "dial_press") modeBound.Add(combo);
+            }
+
+            AddDialModePicker(modeBound);
+
+            int checkRow = tableBindings.RowCount++;
+            tableBindings.RowStyles.Add(new RowStyle());
+            var checkTakeover = new CheckBox { AutoSize = true, Margin = new Padding(Dpx(5), Dpx(3), 0, Dpx(3)), Text = "Take over dial from ASUS software (needs admin)", Checked = DialTakeover.IsEnabled(), AccessibleName = "Take over dial from ASUS software" };
+            tableBindings.Controls.Add(checkTakeover, 0, checkRow);
+            tableBindings.SetColumnSpan(checkTakeover, 3);
+            bool reverting = false;
+            checkTakeover.CheckedChanged += delegate
+            {
+                if (reverting) return;
+                if (!DialTakeover.Apply(checkTakeover.Checked))
+                {
+                    MessageBox.Show("Stopping the ASUS Dial service needs administrator rights. Restart G-Helper as administrator and try again.", "ASUS Dial", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    reverting = true;
+                    checkTakeover.Checked = DialTakeover.IsEnabled();
+                    reverting = false;
+                }
             };
         }
 
@@ -324,6 +466,8 @@ namespace GHelper
                 SetKeyCombo(comboM5, textM5, "m5");
             }
 
+
+            if (DialListener.IsSupported()) AddDialBindings();
 
             InitTheme();
             Shown += Keyboard_Shown;

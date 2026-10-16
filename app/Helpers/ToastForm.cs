@@ -52,7 +52,12 @@ namespace GHelper.Helpers
         FnLock,
         Battery,
         Charger,
-        Controller
+        Controller,
+        Volume,
+        Media,
+        Scroll,
+        Performance,
+        Lighting
     }
 
     public class ToastForm : OSDNativeForm
@@ -81,8 +86,40 @@ namespace GHelper.Helpers
 
         protected override void PerformPaint(PaintEventArgs e)
         {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            e.Graphics.FillRoundedRectangle(_toastBrush, Bound, 10);
+            // the window is sized in physical pixels (see RunToast); draw in 96-dpi units scaled up
+            float scale = ToastScale;
+            e.Graphics.ScaleTransform(scale, scale);
+            DrawToast(e.Graphics, new Rectangle(0, 0, (int)(Bound.Width / scale), (int)(Bound.Height / scale)), toastText, toastIcon);
+        }
+
+        // font-based icons for toasts without a bitmap (crisp at any scale); Segoe Fluent Icons on Windows 11, MDL2 before that
+        static readonly Dictionary<ToastIcon, string> glyphIcons = new()
+        {
+            [ToastIcon.Volume] = "\uE767",
+            [ToastIcon.Media] = "\uE893",
+            [ToastIcon.Scroll] = "\uE8CB",
+            [ToastIcon.Performance] = "\uE945",
+            [ToastIcon.Lighting] = "\uE790",
+        };
+
+        static readonly string glyphFont = FontFamily.Families.Any(f => f.Name == "Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets";
+
+        static readonly Bitmap measureBitmap = new Bitmap(1, 1);
+
+        // width follows the measured text (plus the icon when there is one); 300 is the old minimum
+        public static Size ToastSize(string text, bool hasIcon = false)
+        {
+            using var g = Graphics.FromImage(measureBitmap);
+            int textWidth = (int)Math.Ceiling(g.MeasureString(text, _toastFont, 4000, _toastFormat).Width);
+            return new Size(Math.Max(300, textWidth + (hasIcon ? 18 + 64 + 16 + 36 : 80)), 100);
+        }
+
+        protected static float ToastScale = 1f;
+
+        public static void DrawToast(Graphics g, Rectangle bound, string text, ToastIcon? toastIcon)
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.FillRoundedRectangle(_toastBrush, bound, 10);
 
             using Bitmap? icon = toastIcon switch
             {
@@ -100,16 +137,22 @@ namespace GHelper.Helpers
                 _                        => null
             };
 
-            int shiftX = 0;
+            bool hasIcon = icon is not null || (toastIcon is not null && glyphIcons.ContainsKey(toastIcon.Value));
 
             if (icon is not null)
             {
-                e.Graphics.DrawImage(icon, 18, 18, 64, 64);
-                shiftX = 40;
+                g.DrawImage(icon, 18, 18, 64, 64);
+            }
+            else if (hasIcon)
+            {
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+                using var font = new Font(glyphFont, 58f, FontStyle.Regular, GraphicsUnit.Pixel);
+                g.DrawString(glyphIcons[toastIcon!.Value], font, _toastTextBrush, new RectangleF(18, 18, 64, 64), _toastFormat);
             }
 
-            e.Graphics.DrawString(toastText, _toastFont, _toastTextBrush,
-                new PointF(Bound.Width / 2 + shiftX, Bound.Height / 2), _toastFormat);
+            // text is centred in the space right of the icon (or in the whole toast without one)
+            float textCentre = hasIcon ? (18 + 64 + 16 + bound.Width - 20) / 2f : bound.Width / 2f;
+            g.DrawString(text, _toastFont, _toastTextBrush, new PointF(textCentre, bound.Height / 2f), _toastFormat);
         }
 
         public static void ReadText(string text)
@@ -139,10 +182,12 @@ namespace GHelper.Helpers
 
                 Screen screen1 = Screen.FromHandle(Handle);
 
-                Width = Math.Max(300, 100 + toastText.Length * 22);
-                Height = 100;
+                ToastScale = Math.Max(1f, ControlHelper.GetDpiScale(Program.settingsForm).Value);
+                var toastSize = ToastSize(toastText, icon is not null);
+                Width = (int)(toastSize.Width * ToastScale);
+                Height = (int)(toastSize.Height * ToastScale);
                 X = (screen1.Bounds.Width - Width) / 2;
-                Y = screen1.Bounds.Height - 300 - Height;
+                Y = screen1.Bounds.Height - (int)(300 * ToastScale) - Height;
 
                 Show();
                 User32.SetThreadDpiAwarenessContext(dpiContext);

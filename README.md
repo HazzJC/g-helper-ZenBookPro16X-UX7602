@@ -4,9 +4,9 @@
 ![ASUS ZenBook Pro 16X OLED Per-Key RGB Lighting and G-Helper Integration](docs/zenbook-lighting.png)
 
 This is a personal fork of [seerge/g-helper](https://github.com/seerge/g-helper) — all credit for
-the app itself goes to the original project, incredible tool. This fork exists solely to add support for keyboard individual level backlight control on my
-**ASUS ZenBook Pro 16X OLED (UX7602BZ / UX7602ZM)**, whose keyboard backlight, per-key RGB, side
-lightbars, and brightness controls aren't supported upstream by the current app. 
+the app itself goes to the original project, incredible tool. This fork exists solely to add support for the extra hardware on my
+**ASUS ZenBook Pro 16X OLED (UX7602BZ / UX7602ZM)**: its keyboard backlight, per-key RGB, side
+lightbars, brightness controls and the **ASUS Dial**, none of which are supported upstream by the current app. 
 
 Through live hardware testing and reverse-engineering of ASUS's own MyASUS software, this fork
 adds:
@@ -20,13 +20,45 @@ adds:
 - **Hardware lighting effects** — Static, Breathing, Color Cycle, Rainbow, Strobe, Raindrop, Flash
 - **Colour Rain** — a multi-coloured per-key effect built on a small animation framework, so
   further effects are a subclass and a few lines of wiring for future work 
-
-  To do: 
 - **Software-driven effects** — Heatmap, GPU Mode, Ambient, Battery, Audio Spectrum, Audio Pulse,
-  Gradient and Zone Test are next implementation steps.
+  Gradient and Zone Test
+- **Animated per-key effects** — Aurora, Lava, Sonar, Fireflies and Ember, each with its own palette
+  and speed
+- **Lighting Studio** — every keyboard mode in one grouped list: show or hide each one in the
+  keyboard dropdown and tune the colour-driven presets
+- **The ASUS Dial** — turn, press, double-press and hold are bindable to any G-Helper action, and
+  **dial modes** let a press cycle what turning does (volume → brightness → keyboard backlight …).
+  See below.
 
 All of it is gated behind detection of this specific laptop model, so it has no effect on any
 other supported device. 
+
+### :control_knobs: ASUS Dial
+
+The dial is a touch ring with a centre button. G-Helper reads it directly (read-only) and maps it
+through the same actions as the hotkeys, in **Extra Settings → Key Bindings → ASUS Dial**.
+
+![ASUS Dial settings in Extra Settings](docs/zenbook-dial-settings.png)
+
+- **Bindings** — turn right / left, press, double press and hold, each to any existing action
+  (volume, brightness, keyboard backlight, performance mode, lighting mode, mute, play/pause,
+  next/previous track, scroll, a custom command, …).
+- **Dial modes** — tick the modes you want and put them in order. Pressing the dial switches mode
+  (with an on-screen toast) and turning adjusts the current one: Volume, Screen brightness,
+  Keyboard backlight, Next / previous track, Scroll, Performance mode, Keyboard lighting mode.
+  While modes are on they replace the plain turn / press bindings; double press and hold stay
+  available.
+
+  ![Dial mode toasts](docs/zenbook-dial-toasts.png)
+
+- **Take over from ASUS software** — ASUS's own Dial service acts on the same turns and presses, so
+  with both running every action fires twice. The *Take over dial from ASUS software* checkbox stops
+  and disables only `ASUSDialService`; un-ticking it restores the service. It needs G-Helper to run
+  as administrator.
+
+Details: [`docs/UX7602-DIAL.md`](docs/UX7602-DIAL.md) covers the HID layout, the report formats, the
+feature-report protocol (interface register, loopback) and what is and isn't known. A small HID
+probe for experimenting lives in [`dialprobe`](dialprobe).
 
 # G-Helper - Lightweight control tool for Asus laptops
 

@@ -41,6 +41,7 @@ namespace GHelper
         private static readonly object autoLock = new();
 
         public static InputDispatcher? inputDispatcher;
+        public static DialListener? dialListener;
 
         // The main entry point for the application
         public static void Main(string[] args)
@@ -139,6 +140,13 @@ namespace GHelper
 
             inputDispatcher = new InputDispatcher();
 
+            if (DialListener.IsSupported())
+            {
+                dialListener = new DialListener();
+                dialListener.Start();
+                DialTakeover.EnsureOnStartup();
+            }
+
             settingsForm.InitAura();
             settingsForm.InitMatrix();
 
@@ -197,6 +205,12 @@ namespace GHelper
                     Startup.ReScheduleAdmin();
                     settingsForm.FansToggle(2);
                     modeControl.SetRyzen();
+                    break;
+                case "studio":
+                    settingsForm.ShowStudio();
+                    break;
+                case "perkey":
+                    settingsForm.ShowPerKeyEditor();
                     break;
                 case "colors":
                     Task.Run(async () =>
@@ -474,6 +488,7 @@ namespace GHelper
                 trayIcon.Dispose();
             }
 
+            dialListener?.Dispose();
             PeripheralsProvider.UnregisterForDeviceEvents();
             clamshellControl.UnregisterDisplayEvents();
             NativeMethods.UnregisterPowerSettingNotification(unRegPowerNotify);
