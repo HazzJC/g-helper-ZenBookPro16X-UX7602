@@ -20,14 +20,14 @@ namespace GHelper.Input
         const byte REPORT_ID = 0x0A;
         const int FEATURE_LEN = 13;
         const int RETRY_MS = 5000;
-        const int BURST_GAP_MS = 400;
+        const int STEP_GAP_MS = 300;   // minimum time between steps of cycle-type actions while the dial keeps turning
         const int DOUBLE_PRESS_MS = 350;
 
         // actions that make sense to repeat on every detent; everything else fires once per rotation burst
         static readonly HashSet<string> Repeatable = new()
         {
             "volume_up", "volume_down", "brightness_up", "brightness_down",
-            "backlight_up", "backlight_down", "screenpad_up", "screenpad_down",
+            "backlight_up", "backlight_down", "backlight_fine_up", "backlight_fine_down", "screenpad_up", "screenpad_down",
             "next_track", "prev_track"
         };
 
@@ -38,6 +38,7 @@ namespace GHelper.Input
         readonly CancellationTokenSource cts = new();
         readonly object pressLock = new();
         Thread? thread;
+        readonly System.Collections.Concurrent.BlockingCollection<Action> queue = new();
         HidStream? stream;
 
         bool pressed = false;
@@ -54,7 +55,7 @@ namespace GHelper.Input
         {
             if (action is null) InputDispatcher.KeyProcess(key);
             else if (action == DialModes.NextModeAction) DialModes.Next();
-            else InputDispatcher.RunAction(action);
+            else InputDispatcher.RunAction(action, "dial_mode");
         }
 
         public static bool IsSupported() => AppConfig.IsZenbookPro16X();
@@ -62,8 +63,16 @@ namespace GHelper.Input
         public void Start()
         {
             if (thread is not null) return;
+            new Thread(() =>
+            {
+                try { foreach (var work in queue.GetConsumingEnumerable(cts.Token)) work(); }
+                catch (OperationCanceledException) { }
+            }) { IsBackground = true, Name = "AsusDialActions" }.Start();
             thread = new Thread(Run) { IsBackground = true, Name = "AsusDialListener" };
             thread.Start();
+
+            Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
+            health = new System.Threading.Timer(_ => HealthCheck(), null, 10000, 10000);
         }
 
         static HidDevice? FindDevice()
@@ -82,7 +91,9 @@ namespace GHelper.Input
         }
 
         // register 3 = interface: 2 = vendor stream on this collection (what we read), 1 = Windows radial controller path
-        static void EnsureInterface(HidStream s)
+        // Returns 0 = already 2, 1 = it had reset and was set back to 2, -1 = the device could not be talked to.
+        // The dial drops back to interface 1 (Windows radial controller, a different collection) after sleep, so this has to be re-asserted.
+        static int EnsureInterface(HidStream s)
         {
             try
             {
@@ -100,11 +111,63 @@ namespace GHelper.Input
                     var set = new byte[FEATURE_LEN];
                     set[0] = REPORT_ID; set[1] = 0xC0; set[2] = 0x03; set[3] = 0x02;
                     s.SetFeature(set);
+                    return 1;
                 }
+                return 0;
             }
             catch (Exception ex)
             {
                 Logger.WriteLine("Dial: interface check failed: " + ex.Message);
+                return -1;
+            }
+        }
+
+        // ---- staying connected across sleep / device resets ----
+
+        bool fastRetry;
+        System.Threading.Timer? health;
+
+        /// <summary>Drops the current stream so the read loop opens a fresh one (quickly) and re-asserts the interface.</summary>
+        void Reconnect(string reason)
+        {
+            if (cts.IsCancellationRequested) return;
+            Logger.WriteLine("Dial: reconnecting (" + reason + ")");
+            fastRetry = true;
+            try { stream?.Dispose(); } catch { }
+        }
+
+        void OnPowerModeChanged(object? sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+        {
+            if (e.Mode != Microsoft.Win32.PowerModes.Resume) return;
+            // give the I2C-HID device a moment to come back before re-opening it
+            Task.Delay(2000).ContinueWith(_ => Reconnect("system resume"));
+        }
+
+        /// <summary>
+        /// Every few seconds, from a separate short-lived handle (the read loop's own handle may be blocked in a read or stale): is the
+        /// device still there, and is it still on interface 2? Fixes a reset in place and reopens the stream after it.
+        /// </summary>
+        void HealthCheck()
+        {
+            if (cts.IsCancellationRequested || stream is null) return;
+            try
+            {
+                var device = FindDevice();
+                if (device is null || !device.TryOpen(out HidStream probe))
+                {
+                    Reconnect("device not available");
+                    return;
+                }
+
+                using (probe)
+                {
+                    int result = EnsureInterface(probe);
+                    if (result != 0) Reconnect(result == 1 ? "interface was reset" : "device not answering");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLine("Dial: health check failed: " + ex.Message);
             }
         }
 
@@ -140,7 +203,10 @@ namespace GHelper.Input
                     stream = null;
                 }
 
-                cts.Token.WaitHandle.WaitOne(RETRY_MS);
+                // a deliberate reconnect (resume, interface reset) retries almost at once; a failed open waits longer
+                int wait = fastRetry ? 500 : RETRY_MS;
+                fastRetry = false;
+                cts.Token.WaitHandle.WaitOne(wait);
             }
         }
 
@@ -219,29 +285,33 @@ namespace GHelper.Input
             long now = Environment.TickCount64;
             if (!Repeatable.Contains(action) && key.EndsWith("cw"))
             {
-                // rotation toggle-type action: once per burst
-                if (lastFired.TryGetValue(key, out long last) && now - last < BURST_GAP_MS)
-                {
-                    lastFired[key] = now;
-                    return;
-                }
+                // cycle-type action (lighting / performance mode): one step per STEP_GAP_MS while spinning.
+                // Only a step that actually fires restarts the clock, otherwise continuous spinning would never step again.
+                if (lastFired.TryGetValue(key, out long last) && now - last < STEP_GAP_MS) return;
             }
             lastFired[key] = now;
 
-            try
+            // Run on the action thread, in order: a toast or window update that blocks must never hold up reading the next click.
+            string? resolved = fromMode ? action : null;
+            queue.Add(() =>
             {
-                Logger.WriteLine($"Dial: {key} -> {action}");
-                dispatch(key, fromMode ? action : null);
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteLine($"Dial: action {action} failed: {ex.Message}");
-            }
+                try
+                {
+                    Logger.WriteLine($"Dial: {key} -> {action}");
+                    dispatch(key, resolved);
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteLine($"Dial: action {action} failed: {ex.Message}");
+                }
+            });
         }
 
         public void Dispose()
         {
             cts.Cancel();
+            Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+            health?.Dispose();
             lock (pressLock) { pendingPress?.Dispose(); pendingPress = null; }
             try { stream?.Dispose(); } catch { }
         }

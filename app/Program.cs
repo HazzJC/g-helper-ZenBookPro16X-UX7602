@@ -116,7 +116,7 @@ namespace GHelper
 
             Application.EnableVisualStyles();
 
-            HardwareControl.RecreateGpuControl();
+            ResumeGuard.InitGpuControl();
 
             trayIcon = new NotifyIcon
             {
@@ -145,6 +145,7 @@ namespace GHelper
                 dialListener = new DialListener();
                 dialListener.Start();
                 DialTakeover.EnsureOnStartup();
+                AsusLightingAgent.Start();
             }
 
             settingsForm.InitAura();

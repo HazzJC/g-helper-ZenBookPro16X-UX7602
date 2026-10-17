@@ -630,11 +630,63 @@ namespace GHelper.Input
             RunAction(action, name);
         }
 
+        static long lastFineStep;
+        static long lastFineHardwareWrite;
+
+        /// <summary>
+        /// Fine brightness is a gain on the colours, and its range and resolution are best at hardware level 3 (at level 1 the lowest
+        /// steps collapse: white 2 is off there). So whenever it is used the hardware is put at level 3 - written explicitly, not just
+        /// trusted from the stored level, because Fn+F7 changes the hardware level through ASUS without telling G-Helper.
+        /// </summary>
+        public static void EnsureFineHardwareLevel()
+        {
+            int level = GetBacklight();
+            if (level < 3)
+            {
+                SetBacklight(3 - level, true);   // updates the stored level, the slider and the hardware
+                lastFineHardwareWrite = Environment.TickCount64;
+            }
+            else if (Environment.TickCount64 - lastFineHardwareWrite > 1500)
+            {
+                Aura.DirectBrightness(3, "Fine");
+                lastFineHardwareWrite = Environment.TickCount64;
+            }
+        }
+
+        // ZenBook Pro 16X fine brightness (hardware level x colour gain). Firmware effects that choose their own colours can only follow
+        // the four hardware steps, so those fall back to them.
+        static void StepFineBacklight(int direction)
+        {
+            if (!AppConfig.IsZenbookPro16X() || !KeyboardBrightness.IsColourDriven(Aura.Mode))
+            {
+                SetBacklight(direction, true);
+                return;
+            }
+
+            // dimming an off keyboard does nothing; brightening it switches it on (see EnsureFineHardwareLevel)
+            if (GetBacklight() == 0 && direction < 0) return;
+            EnsureFineHardwareLevel();
+
+            // a fast spin skips a stop, but only above 20% - the low end stays fully fine-grained
+            long now = Environment.TickCount64;
+            bool fast = now - lastFineStep < 80 && KeyboardBrightness.Percent > 20;
+            lastFineStep = now;
+            int percent = KeyboardBrightness.StepStops(direction, fast ? 2 : 1);
+            Program.settingsForm.extraForm?.VisualiseFineBrightness(percent);
+            Program.toast.RunToast($"Backlight {percent}%", direction > 0 ? ToastIcon.BacklightUp : ToastIcon.BacklightDown);
+        }
+
         // runs a named action; `name` is only needed by "custom" (its command lives under <name>_custom in the config)
         public static void RunAction(string? action, string name = "")
         {
             switch (action)
             {
+                case "backlight_fine_up":
+                    StepFineBacklight(1);
+                    break;
+                case "backlight_fine_down":
+                    StepFineBacklight(-1);
+                    break;
                 case "scroll_up":
                     KeyboardHook.mouse_event(0x0800, 0, 0, 120, 0);
                     break;
@@ -657,10 +709,10 @@ namespace GHelper.Input
                     KeyboardHook.KeyPress(Keys.VolumeUp);
                     break;
                 case "backlight_down":
-                    SetBacklight(-1);
+                    SetBacklight(-1, name.StartsWith("dial_"));   // the dial is not a hotkey ASUS Optimization handles, so always write
                     break;
                 case "backlight_up":
-                    SetBacklight(1);
+                    SetBacklight(1, name.StartsWith("dial_"));
                     break;
                 case "play":
                     KeyboardHook.KeyPress(Keys.MediaPlayPause);

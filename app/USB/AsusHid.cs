@@ -198,8 +198,12 @@ public static class AsusHid
             }
     }
 
+    /// <summary>Test hook: sees every lighting packet before it is sent (null in the app).</summary>
+    public static Action<byte[]>? TraceAura;
+
     public static void SetFeatureAura(byte[] data, bool retry = true)
     {
+        TraceAura?.Invoke(data);
         EnsureAuraStream();
         if (auraStream == null)
         {

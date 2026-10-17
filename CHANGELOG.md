@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-10-18
+
+### Added
+- **GPU resume guard (UX7602)**: if G-Helper is started within 10 minutes of waking from sleep, its first contact with the NVIDIA GPU is delayed by 30 s (`gpu_resume_guard`, `gpu_resume_window_min`, `gpu_resume_delay`). A mitigation for a bluescreen (0x10E in Windows' video memory manager, minutes after a resume) whose cause is not proven.
+- **Fine keyboard brightness (UX7602)**: a 1-100% control that multiplies with the four hardware levels by scaling colours on output,
+  with every percentage distinct and 1% still visible. Slider in Extra Settings > Laptop Backlight, and the dial's *Keyboard backlight* mode now uses it.
+  New actions *Backlight brighter / dimmer (fine)*.
+- Option **Stop MyASUS lighting agent**: stops `AsusExclusiveAgent.exe` (checked every 10 s) so it no longer re-applies ASUS's effect on Fn+F7.
+
+### Fixed
+- **Brightness flicker**: changing fine brightness no longer blanks the keyboard. Each step used to reset the frame buffer (a brief blackout), repeated on every dial click, which looked like flashing and is a photosensitivity risk. Steps now only change colour values (verified at packet level: no enable/blank packet and no mode re-send for per-key modes).
+- Dial: after sleep the dial dropped back to the Windows radial interface and stopped reporting. The listener now re-asserts interface 2 on resume and checks every 10 s, reconnecting when the interface was reset or the device went away.
+- Dial: brightness steps follow a non-linear scale (1% per click up to 12%, growing to 5%), apply immediately (no debounce) and never block the dial thread.
+- Dial: cycling the lighting / performance mode while the dial keeps turning got stuck after one or two steps; it now steps every 300 ms.
+- Dial: the *Keyboard backlight* mode did nothing when ASUS Optimization was running (the hardware write was skipped as if it were a hotkey).
+- Documented that the hardware brightness byte only accepts 0-3 (anything higher turns the keyboard off).
+
 ## [1.1.0] - 2026-10-16
 
 ### Added

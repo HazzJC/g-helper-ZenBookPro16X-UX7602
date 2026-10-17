@@ -285,3 +285,38 @@ animating after it is killed — the MCU renders those itself.
   themselves are still hidden from the dropdown on this model pending per-mode work; see the
   status table in `FINDINGS.md`. GPU Mode and Battery additionally send the Strix `0x5D`
   command, which this keyboard doesn't have.
+
+## Brightness: what the hardware actually does (2026-10-17, observed live)
+
+Two independent controls multiply, and neither is continuous on its own:
+
+- **Hardware level**: feature report `0x5A`, `5A BA C5 C4 <level>`. Only **0-3** are valid: 0 = off, 1/2/3 = three distinct
+  steps (1 is still fairly bright). **Any byte above 3 turns the keyboard off** (tested 4-255). This is also all ASUS's own
+  stack uses: `Fn+F7` cycles 0 -> 1 -> 2 -> 3 -> 0 (`HKLM\SOFTWARE\ASUS\ASUS System Control Interface\AsusOptimization\ASUS Keyboard Hotkeys`,
+  `HidKeybdLightLevel` = `0x80 | level`), and the key itself arrives as input report `5A C7 ...` (down) / `5A 00 ...` (up).
+- **Colour value** (R=G=B=v in a mode-set or per-key frame): a full 0-255 range, and the only way to get dimmer than hardware level 1.
+  Hardware level 3 + white 2 is clearly visible and very dim; white 1 is invisible (below the LED driver's floor).
+
+They behave like a gain: effective brightness ~ colour value x gain(level), gain(3) = 1 > gain(2) > gain(1) > 0. Evidence:
+white 2 is visible at level 3 but off at level 1; white 10/20/32/50 are visible and correctly ordered at every level 1-3.
+A true analogue (current-limit) level would look the same from the outside, so the exact gains are unmeasured.
+
+Practical consequence: only colour-driven modes (static, per-key frames, software effects) can dim smoothly (scale the colours);
+firmware effects (Rain, Rainbow, ...) choose their own colours and only have the four hardware steps.
+`ASUS's AsusExclusiveAgent` re-applies its saved effect on every `Fn+F7`, so lighting set by G-Helper is overwritten unless the agent is stopped.
+
+### Fine brightness (implemented)
+
+`KeyboardBrightness` (`app/USB/Zenbook16XBrightness.cs`) applies a gain to colours at the three output points
+(`Aura.ApplyZenbook16XDirect`, `Aura.SendZenbook16XHardwareMode`, `Zenbook16X.Stream`), on top of the four hardware levels.
+Config: `kb_fine` (1-100, default 100 = unchanged), the dial moves along `KeyboardBrightness.Stops` (1% per click below ~12%, growing to 5%).
+
+- Output for a full-scale colour is `V(p) = 2 + (e^(k(p-1)) - 1) / k`, with `k` solved so `V(100) = 255`. It starts at exactly one colour
+  step per percent, so no two percentages collapse to the same value (a plain exponential did: 3% and 1% were both 4), then bends
+  upward so the top feels even. Verified on the keyboard: every percentage distinct; equal 10% steps feel evenly spaced;
+  1% is always visible as a very dim glow, including in pure blue.
+- Colours with a channel >= 24 are lifted to at least 2 so a lit colour can't vanish. Black stays black.
+- Firmware effects that choose their own colours (Rainbow, Colour Cycle, Rain) can't be dimmed this way; the dial's backlight
+  mode falls back to the four hardware steps for them.
+- `AsusLightingAgent` (option "Stop MyASUS lighting agent") keeps `AsusExclusiveAgent.exe` stopped (checked every 10 s), because it
+  re-applies ASUS's saved effect on `Fn+F7`.

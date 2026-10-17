@@ -56,6 +56,12 @@ namespace GHelper
               {"custom", Properties.Strings.Custom}
             };
 
+            if (AppConfig.IsZenbookPro16X())
+            {
+                customActions.Add("backlight_fine_down", "Backlight dimmer (fine)");
+                customActions.Add("backlight_fine_up", "Backlight brighter (fine)");
+            }
+
             if (AppConfig.IsDUO())
             {
                 customActions.Add("screenpad_down", Properties.Strings.ScreenPadDown);
@@ -140,6 +146,52 @@ namespace GHelper
             {
                 AppConfig.Set(name + "_custom", txbox.Text);
             };
+        }
+
+        // ZenBook Pro 16X: smooth brightness (multiplies with the four hardware levels above) and the MyASUS lighting agent guard
+        Slider? fineSlider;
+        Label? fineValueLabel;
+
+        public void VisualiseFineBrightness(int percent)
+        {
+            if (fineSlider is null) return;
+            if (InvokeRequired) { BeginInvoke(() => VisualiseFineBrightness(percent)); return; }   // async: never block the dial thread
+            fineSlider.Value = percent;   // its ValueChanged re-applies the same value, which is harmless
+            fineValueLabel!.Text = percent + "%";
+        }
+
+        private void AddFineBrightness()
+        {
+            int row = tableBacklight.RowCount;
+            tableBacklight.RowCount += 2;
+            tableBacklight.RowStyles.Add(new RowStyle());
+            tableBacklight.RowStyles.Add(new RowStyle());
+
+            var label = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(Dpx(5), Dpx(6), Dpx(5), 0), Padding = new Padding(Dpx(9), Dpx(5), Dpx(7), Dpx(5)), Text = "Fine brightness" };
+            fineSlider = new Slider { Min = KeyboardBrightness.MinPercent, Max = 100, Step = 1, Value = KeyboardBrightness.Percent, Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(Dpx(5), Dpx(6), Dpx(5), 0), Height = Dpx(40), MinimumSize = new Size(Dpx(300), Dpx(40)), TabStop = true, AccessibleName = "Fine keyboard brightness" };
+            fineValueLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(Dpx(5), Dpx(6), Dpx(5), 0), Padding = new Padding(0, Dpx(5), 0, Dpx(5)), Text = KeyboardBrightness.Percent + "%" };
+
+            tableBacklight.Controls.Add(label, 0, row);
+            tableBacklight.Controls.Add(fineSlider, 1, row);
+            tableBacklight.SetColumnSpan(fineSlider, 3);
+            tableBacklight.Controls.Add(fineValueLabel, 4, row);
+
+            fineSlider.ValueChanged += delegate
+            {
+                int percent = fineSlider.Value;
+                fineValueLabel.Text = percent + "%";
+                fineSlider.AccessibleName = "Fine keyboard brightness: " + percent + "%";
+                if (percent != KeyboardBrightness.Percent)
+                {
+                    InputDispatcher.EnsureFineHardwareLevel();
+                    KeyboardBrightness.Set(percent);
+                }
+            };
+
+            var checkAgent = new CheckBox { AutoSize = true, Margin = new Padding(Dpx(14), Dpx(6), 0, Dpx(3)), Text = "Stop MyASUS lighting agent (it re-applies ASUS's effect on Fn+F7)", Checked = AsusLightingAgent.IsEnabled, AccessibleName = "Stop MyASUS lighting agent" };
+            tableBacklight.Controls.Add(checkAgent, 0, row + 1);
+            tableBacklight.SetColumnSpan(checkAgent, 5);
+            checkAgent.CheckedChanged += delegate { AsusLightingAgent.SetEnabled(checkAgent.Checked); };
         }
 
         // The form is authored at 192 DPI and auto-scaled when it is shown, but controls created in code after
@@ -468,6 +520,7 @@ namespace GHelper
 
 
             if (DialListener.IsSupported()) AddDialBindings();
+            if (AppConfig.IsZenbookPro16X()) AddFineBrightness();
 
             InitTheme();
             Shown += Keyboard_Shown;

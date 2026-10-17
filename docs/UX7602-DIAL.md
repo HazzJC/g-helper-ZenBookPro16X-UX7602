@@ -116,3 +116,12 @@ Set `0A C0 03 01`, turned the dial for 60 s, restored `0A C0 03 02` (readback co
 - **Extra form DPI gotcha**: the form is authored at 192 DPI and auto-scaled on show, but controls created in code in the
   constructor are NOT scaled. Use `Dpx()` (designer-px -> current DPI) for sizes/margins, and fit list heights after the
   handle exists (`ItemHeight` is only final then).
+
+## Updates (2026-10-17/18)
+- **The dial drops back to interface 1 after sleep.** After a resume the interface register (register 3) reads 1 (the Windows radial
+  controller on COL01) instead of 2, so a listener on the vendor collection hears nothing until it is set back with `0A C0 03 02`.
+  `DialListener` now re-asserts interface 2 on resume and every 10 s from a separate handle, reconnecting if the register was reset or the
+  device went away (`Dial: interface was 1, setting 2` / `Dial: reconnecting (...)` in the log).
+- **Backlight mode uses fine brightness**, stepping along 34 stops (1% per click below ~12%, growing to 5%), applied immediately on a
+  background worker that always sends the newest value. Details and measurements: [`UX7602-LIGHTING.md`](UX7602-LIGHTING.md#fine-brightness-implemented).
+- Cycle-type actions (lighting / performance mode) step once per 300 ms while the dial keeps turning, instead of once per burst.

@@ -13,7 +13,7 @@ namespace GHelper.Input
         [
             new("volume", "Volume", "volume_up", "volume_down", ToastIcon.Volume),
             new("brightness", "Screen brightness", "brightness_up", "brightness_down", ToastIcon.BrightnessUp, "Brightness"),
-            new("backlight", "Keyboard backlight", "backlight_up", "backlight_down", ToastIcon.BacklightUp, "Backlight"),
+            new("backlight", "Keyboard backlight", "backlight_fine_up", "backlight_fine_down", ToastIcon.BacklightUp, "Backlight"),
             new("media", "Next / previous track", "next_track", "prev_track", ToastIcon.Media, "Tracks"),
             new("scroll", "Scroll", "scroll_down", "scroll_up", ToastIcon.Scroll),
             new("performance", "Performance mode", "performance", "performance_back", ToastIcon.Performance, "Performance"),

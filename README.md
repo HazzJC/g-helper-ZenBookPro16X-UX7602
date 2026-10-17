@@ -24,6 +24,8 @@ adds:
   Gradient and Zone Test
 - **Animated per-key effects** — Aurora, Lava, Sonar, Fireflies and Ember, each with its own palette
   and speed
+- **Fine brightness** — a 1-100% keyboard brightness on top of the four hardware levels, with 1% still visible; also on
+  the dial. Plus an option to stop MyASUS's lighting agent, which otherwise re-applies its own effect on Fn+F7
 - **Lighting Studio** — every keyboard mode in one grouped list: show or hide each one in the
   keyboard dropdown and tune the colour-driven presets
 - **The ASUS Dial** — turn, press, double-press and hold are bindable to any G-Helper action, and
@@ -59,6 +61,38 @@ through the same actions as the hotkeys, in **Extra Settings → Key Bindings �
 Details: [`docs/UX7602-DIAL.md`](docs/UX7602-DIAL.md) covers the HID layout, the report formats, the
 feature-report protocol (interface register, loopback) and what is and isn't known. A small HID
 probe for experimenting lives in [`dialprobe`](dialprobe).
+
+The dial reports in a vendor mode that the hardware resets to the Windows default after sleep; G-Helper
+sets it back on resume and re-checks every few seconds, so it keeps working across sleep.
+
+### :high_brightness: Fine keyboard brightness
+
+The keyboard's hardware brightness only has four steps (off and three levels, and level 1 is still
+fairly bright). G-Helper adds a **1–100 %** control on top by scaling the colours it sends, so you can
+go far dimmer than the hardware allows.
+
+![Fine brightness slider and MyASUS lighting agent option](docs/zenbook-fine-brightness.png)
+
+- **Slider** — *Extra Settings → Laptop Backlight → Fine brightness*. The dial's **Keyboard backlight**
+  mode uses it too, with finer steps at the dim end (1 % per click up to about 12 %).
+- **1 % is always visible** as a very dim glow, in white and in saturated colours alike. Brightening from
+  off switches the keyboard on at hardware level 3, where the range is finest.
+- **No flashing** — a brightness change only alters colour values; it never blanks or restarts the
+  keyboard.
+- **Firmware effects that choose their own colours** (Rainbow, Colour Cycle, Rain) can't be scaled this
+  way, so they only follow the four hardware steps.
+- **Stop MyASUS lighting agent** — MyASUS's `AsusExclusiveAgent` re-applies ASUS's saved effect whenever
+  the backlight changes (for example Fn+F7), overwriting G-Helper's lighting. This option keeps that one
+  process stopped.
+
+How it was measured, and why the curve looks the way it does:
+[`docs/UX7602-LIGHTING.md`](docs/UX7602-LIGHTING.md#brightness-what-the-hardware-actually-does-2026-10-17-observed-live).
+
+**Note on a crash seen once:** a bluescreen (`0x10E`, inside Windows' video memory manager) happened about
+two seconds after G-Helper started its NVIDIA GPU initialisation, a few minutes after the laptop woke
+from a long sleep. The crash dump contains no G-Helper code, so the cause is unproven; as a precaution,
+if G-Helper is *started* within 10 minutes of a resume, its first contact with the GPU is delayed by 30
+seconds (`gpu_resume_guard`, `gpu_resume_window_min`, `gpu_resume_delay` in the config).
 
 # G-Helper - Lightweight control tool for Asus laptops
 

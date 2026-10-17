@@ -902,9 +902,10 @@ namespace GHelper.USB
                 for (int k = 0; k < count; k++)
                 {
                     int keyIdx = chunkStart + k;
-                    pkt[9 + k * 3]     = buffer[keyIdx].R;
-                    pkt[9 + k * 3 + 1] = buffer[keyIdx].G;
-                    pkt[9 + k * 3 + 2] = buffer[keyIdx].B;
+                    Color px = KeyboardBrightness.Apply(buffer[keyIdx]);   // fine brightness
+                    pkt[9 + k * 3]     = px.R;
+                    pkt[9 + k * 3 + 1] = px.G;
+                    pkt[9 + k * 3 + 2] = px.B;
                 }
 
                 AsusHid.SetFeatureAura(pkt);
@@ -1165,10 +1166,46 @@ namespace GHelper.USB
         }
 
         /// <summary>
+        /// Re-sends what is showing so a changed fine-brightness gain takes effect now. Much lighter than ApplyAura (no settings re-read,
+        /// no timer / engine restarts, no log line), so it can run on every dial click. Animated effects pick the gain up on their
+        /// next frame, and software-driven modes fall back to the full path.
+        /// </summary>
+        public static void RefreshZenbook16XBrightness()
+        {
+            if (!AppConfig.IsZenbookPro16X() || PerKeyEngine.Running) return;
+            if (!backlight || sessionLock) return;
+
+            // Nothing here may blank or restart the keyboard: a flash on every dial click is unpleasant and a photosensitivity risk.
+            switch (Mode)
+            {
+                case AuraMode.CUSTOM_PERKEY:
+                    ApplyCustomPerKey(refresh: true);
+                    break;
+                case AuraMode.AuraStatic:
+                    // one solid colour: stream it (direct mode is reused, never re-enabled) instead of re-sending the firmware mode
+                    ApplyZenbook16XDirect(Enumerable.Repeat(Color1, 8).ToArray());
+                    break;
+                case AuraMode.GRADIENT:
+                    CustomRGB.ApplyGradient();
+                    break;
+                case AuraMode.ZONETEST:
+                    CustomRGB.ApplyZoneTest();
+                    break;
+                case AuraMode.GPUMODE:
+                    CustomRGB.ApplyGPUColor();
+                    break;
+                default:
+                    // Animated firmware modes (Breathe, Strobe, Flash) already move, and the timer-driven software modes (Heatmap, Battery,
+                    // Ambient, Audio) and engine effects re-render on their next tick or frame with the new gain: nothing to re-send.
+                    break;
+            }
+        }
+
+        /// <summary>
         /// Plays back the frame painted in the per-key editor, with whatever animation was saved
         /// alongside it. Static needs only one write; the others run through the effect engine.
         /// </summary>
-        private static void ApplyCustomPerKey()
+        private static void ApplyCustomPerKey(bool refresh = false)
         {
             if (!backlight || sessionLock) return;
 
@@ -1176,7 +1213,9 @@ namespace GHelper.USB
 
             if (profile.Effect == CustomFrameMode.Static)
             {
-                Zenbook16X.DirectEnable();
+                // DirectEnable resets the frame buffer, i.e. blanks the keyboard for a moment. That is fine when switching modes, but a
+                // brightness refresh must only change colour values, so it reuses direct mode if it is already active.
+                if (refresh) Zenbook16X.EnsureDirect(); else Zenbook16X.DirectEnable();
                 Zenbook16X.Stream(profile.Frame);
             }
             else
@@ -1213,6 +1252,7 @@ namespace GHelper.USB
 
         private static void SendZenbook16XHardwareMode(byte hwMode, Color color, byte speedByte)
         {
+            color = KeyboardBrightness.Apply(color);   // fine brightness (ignored by firmware effects that pick their own colours)
             byte[] pkt = new byte[64];
             pkt[0] = AsusHid.ZENBOOK_16X_AURA_ID;
             pkt[1] = 0xA0;
