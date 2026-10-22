@@ -24,12 +24,12 @@ adds:
   Gradient and Zone Test
 - **Animated per-key effects** — Aurora, Lava, Sonar, Fireflies and Ember, each with its own palette
   and speed
-- **Fine brightness** — a 1-100% keyboard brightness on top of the four hardware levels, with 1% still visible; also on
-  the dial. Plus an option to stop MyASUS's lighting agent, which otherwise re-applies its own effect on Fn+F7
+- **Keyboard brightness, one slider** — *Backlight brightness* in the main window, 0 (off) to 100 %, going
+  far dimmer than the four hardware levels allow, with 1 % still visible and smooth fades. Also on the dial.
 - **Lighting Studio** — every keyboard mode in one grouped list: show or hide each one in the
   keyboard dropdown and tune the colour-driven presets
-- **The ASUS Dial** — turn, press, double-press and hold are bindable to any G-Helper action, and
-  **dial modes** let a press cycle what turning does (volume → brightness → keyboard backlight …).
+- **The ASUS Dial** — its own settings window, dial modes (press to switch what turning does: volume →
+  brightness → keyboard backlight …), an on-screen ring showing the value, and a hold-to-pick mode wheel.
   See below.
 
 All of it is gated behind detection of this specific laptop model, so it has no effect on any
@@ -37,53 +37,61 @@ other supported device.
 
 ### :control_knobs: ASUS Dial
 
-The dial is a touch ring with a centre button. G-Helper reads it directly (read-only) and maps it
-through the same actions as the hotkeys, in **Extra Settings → Key Bindings → ASUS Dial**.
+The dial is a touch ring with a centre button. G-Helper reads it directly (read-only). Its settings are in
+their own window: **Laptop Keyboard → ASUS Dial** in the main window.
 
-![ASUS Dial settings in Extra Settings](docs/zenbook-dial-settings.png)
+![ASUS Dial window](docs/zenbook-dial-window.png)
 
-- **Bindings** — turn right / left, press, double press and hold, each to any existing action
-  (volume, brightness, keyboard backlight, performance mode, lighting mode, mute, play/pause,
-  next/previous track, scroll, a custom command, …).
-- **Dial modes** — tick the modes you want and put them in order. Pressing the dial switches mode
-  (with an on-screen toast) and turning adjusts the current one: Volume, Screen brightness,
-  Keyboard backlight, Next / previous track, Scroll, Performance mode, Keyboard lighting mode.
-  While modes are on they replace the plain turn / press bindings; double press and hold stay
-  available.
+- **Dial modes** — tick the modes you want and put them in order. A press switches mode, turning adjusts
+  the current one: Volume, Screen brightness, Keyboard backlight, Next / previous track, Scroll,
+  Performance mode, Keyboard lighting mode. Volume (2 %) and screen brightness (5 %) are set directly, so
+  steps are exact.
+- **Simple bindings** — instead of modes, turn right / left and press run any G-Helper action (volume,
+  brightness, backlight, performance mode, lighting mode, mute, play/pause, tracks, scroll, a custom
+  command, …). Double press and hold are bindable either way.
+- **On-screen ring** — while using dial modes, the mode's icon sits in a ring showing its value (or which
+  of a few states it's in). Optional; off shows plain text notifications.
 
-  ![Dial mode toasts](docs/zenbook-dial-toasts.png)
+  ![Dial on-screen ring](docs/zenbook-dial-ring.png)
 
-- **Take over from ASUS software** — ASUS's own Dial service acts on the same turns and presses, so
-  with both running every action fires twice. The *Take over dial from ASUS software* checkbox stops
-  and disables only `ASUSDialService`; un-ticking it restores the service. It needs G-Helper to run
-  as administrator.
+- **Mode wheel** — hold the dial to see every mode at once, turn to choose, press to pick (3 s without
+  input cancels). Optional; off, hold runs its own binding and a press simply cycles modes.
+
+  ![Hold-to-pick mode wheel](docs/zenbook-dial-wheel.png)
+
+- **Live status** — the window shows whether the dial is connected, and a small ring follows the real
+  dial as you turn and press it.
+- **Take over from ASUS software** — ASUS's own Dial service acts on the same turns and presses, so with
+  both running every action fires twice. This stops and disables only `ASUSDialService`; un-ticking it
+  restores the service. It needs G-Helper to run as administrator.
+
+The dial reports in a vendor mode that the hardware resets to the Windows default after sleep; G-Helper
+sets it back on resume and re-checks every few seconds, so it keeps working across sleep.
 
 Details: [`docs/UX7602-DIAL.md`](docs/UX7602-DIAL.md) covers the HID layout, the report formats, the
 feature-report protocol (interface register, loopback) and what is and isn't known. A small HID
 probe for experimenting lives in [`dialprobe`](dialprobe).
 
-The dial reports in a vendor mode that the hardware resets to the Windows default after sleep; G-Helper
-sets it back on resume and re-checks every few seconds, so it keeps working across sleep.
-
-### :high_brightness: Fine keyboard brightness
+### :high_brightness: Keyboard brightness
 
 The keyboard's hardware brightness only has four steps (off and three levels, and level 1 is still
-fairly bright). G-Helper adds a **1–100 %** control on top by scaling the colours it sends, so you can
-go far dimmer than the hardware allows.
+fairly bright). G-Helper scales the colours it sends on top, so one slider covers everything from off to
+full, and far dimmer than the hardware allows.
 
-![Fine brightness slider and MyASUS lighting agent option](docs/zenbook-fine-brightness.png)
+![Laptop Keyboard controls with the Backlight brightness slider](docs/zenbook-keyboard-controls.png)
 
-- **Slider** — *Extra Settings → Laptop Backlight → Fine brightness*. The dial's **Keyboard backlight**
-  mode uses it too, with finer steps at the dim end (1 % per click up to about 12 %).
-- **1 % is always visible** as a very dim glow, in white and in saturated colours alike. Brightening from
-  off switches the keyboard on at hardware level 3, where the range is finest.
-- **No flashing** — a brightness change only alters colour values; it never blanks or restarts the
-  keyboard.
-- **Firmware effects that choose their own colours** (Rainbow, Colour Cycle, Rain) can't be scaled this
-  way, so they only follow the four hardware steps.
-- **Stop MyASUS lighting agent** — MyASUS's `AsusExclusiveAgent` re-applies ASUS's saved effect whenever
-  the backlight changes (for example Fn+F7), overwriting G-Helper's lighting. This option keeps that one
-  process stopped.
+- **One slider** — *Backlight brightness* in the main window, 0 = off. The hardware level is handled
+  automatically (level 3, where the range is finest). The dial's **Keyboard backlight** mode moves the same
+  value, finely at the dim end (1 % per click up to about 12 %) and easing off towards the top.
+- **1 % is always visible** as a very dim glow, in white and in saturated colours alike.
+- **Smooth and flicker-free** — changes fade over about 120 ms and the idle timeout fades out and back in;
+  a change only alters colour values, it never blanks or restarts the keyboard.
+- **Firmware effects** (Rainbow, Colour Cycle, Rain) choose their own colours, so by default the slider moves
+  them through the four hardware steps. *Extra → Laptop Backlight → Smooth dimming for Rainbow and Colour
+  Cycle* draws those two in G-Helper instead, so they dim fully (they then stop when G-Helper is closed).
+- **Stop MyASUS lighting agent** (Extra → Laptop Backlight) — MyASUS's `AsusExclusiveAgent` re-applies
+  ASUS's saved effect whenever the backlight changes (for example Fn+F7), overwriting G-Helper's lighting.
+  This option keeps that one process stopped.
 
 How it was measured, and why the curve looks the way it does:
 [`docs/UX7602-LIGHTING.md`](docs/UX7602-LIGHTING.md#brightness-what-the-hardware-actually-does-2026-10-17-observed-live).

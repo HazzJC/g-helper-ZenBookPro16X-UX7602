@@ -80,13 +80,13 @@ namespace GHelper.Input
             if (backlightActivity && iddle.TotalSeconds > kb_timeout)
             {
                 backlightActivity = false;
-                Aura.ApplyBrightness(0, "Timeout");
+                KeyboardBrightness.FadeOutThen(() => Aura.ApplyBrightness(0, "Timeout"));   // 16X: fades to black first
             }
 
             if (!backlightActivity && iddle.TotalSeconds < kb_timeout)
             {
                 backlightActivity = true;
-                SetBacklightAuto();
+                KeyboardBrightness.FadeInWith(SetBacklightAuto);   // 16X: switches on from black, then fades up
             }
 
             //Logger.WriteLine("Iddle: " + iddle.TotalSeconds);
@@ -643,7 +643,7 @@ namespace GHelper.Input
             int level = GetBacklight();
             if (level < 3)
             {
-                SetBacklight(3 - level, true);   // updates the stored level, the slider and the hardware
+                SetBacklight(3 - level, true, toast: false);   // stored level, sliders and hardware; no "Max" toast in front of the percent one
                 lastFineHardwareWrite = Environment.TickCount64;
             }
             else if (Environment.TickCount64 - lastFineHardwareWrite > 1500)
@@ -672,7 +672,6 @@ namespace GHelper.Input
             bool fast = now - lastFineStep < 80 && KeyboardBrightness.Percent > 20;
             lastFineStep = now;
             int percent = KeyboardBrightness.StepStops(direction, fast ? 2 : 1);
-            Program.settingsForm.extraForm?.VisualiseFineBrightness(percent);
             Program.toast.RunToast($"Backlight {percent}%", direction > 0 ? ToastIcon.BacklightUp : ToastIcon.BacklightDown);
         }
 
@@ -681,6 +680,22 @@ namespace GHelper.Input
         {
             switch (action)
             {
+                case "volume_fine_up":
+                case "volume_fine_down":
+                    {
+                        int v = Audio.AdjustVolume((action == "volume_fine_up" ? 1 : -1) * AppConfig.Get("dial_volume_step", 2));
+                        if (v >= 0) Program.toast.RunToast($"Volume {v}%", ToastIcon.Volume);
+                    }
+                    break;
+                case "screen_fine_up":
+                case "screen_fine_down":
+                    try
+                    {
+                        int b = ScreenBrightness.Adjust((action == "screen_fine_up" ? 1 : -1) * AppConfig.Get("dial_brightness_step", 5));
+                        Program.toast.RunToast($"{b}%", action == "screen_fine_up" ? ToastIcon.BrightnessUp : ToastIcon.BrightnessDown);
+                    }
+                    catch (Exception ex) { Logger.WriteLine("Screen brightness change failed: " + ex.Message); }
+                    break;
                 case "backlight_fine_up":
                     StepFineBacklight(1);
                     break;
@@ -1234,7 +1249,7 @@ namespace GHelper.Input
             Aura.DirectBrightness(GetBacklight(), "Startup");
         }
 
-        public static void SetBacklight(int delta, bool force = false)
+        public static void SetBacklight(int delta, bool force = false, bool toast = true)
         {
             int backlight_power = AppConfig.Get("keyboard_brightness", 1);
             int backlight_battery = AppConfig.Get("keyboard_brightness_ac", 1);
@@ -1255,13 +1270,14 @@ namespace GHelper.Input
 
             var extraForm = Program.settingsForm.extraForm;
             if (extraForm != null && extraForm.Text != "") extraForm.VisualiseBacklight(backlight);
+            KeyboardBrightness.RaiseChanged();
 
             if (force || !AsusService.IsAsusOptimizationRunning())
             {
                 Aura.ApplyBrightness(backlight, "HotKey");
             }
 
-            if (!AsusService.IsOSDRunning())
+            if (toast && !AsusService.IsOSDRunning())
             {
                 string[] backlightNames = new string[] { Properties.Strings.BacklightOff, Properties.Strings.BacklightLow, Properties.Strings.BacklightMid, Properties.Strings.BacklightMax };
                 Program.toast.RunToast(backlightNames[backlight], delta > 0 ? ToastIcon.BacklightUp : ToastIcon.BacklightDown);

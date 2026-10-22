@@ -125,3 +125,11 @@ Set `0A C0 03 01`, turned the dial for 60 s, restored `0A C0 03 02` (readback co
 - **Backlight mode uses fine brightness**, stepping along 34 stops (1% per click below ~12%, growing to 5%), applied immediately on a
   background worker that always sends the newest value. Details and measurements: [`UX7602-LIGHTING.md`](UX7602-LIGHTING.md#fine-brightness-implemented).
 - Cycle-type actions (lighting / performance mode) step once per 300 ms while the dial keeps turning, instead of once per burst.
+
+## v1.3 (2026-10-22)
+- Settings moved to their own window (`Zenbook16XDial`, main window -> Laptop Keyboard -> ASUS Dial) with live status and a ring that
+  follows the dial (`DialListener.IsConnected`, `Activity` event).
+- On-screen ring (`DialOsd`) for dial modes, replacing toasts while showing (`ToastForm.SuppressUntil`); optional via `dial_osd`.
+  Volume now uses Core Audio directly (`Audio.AdjustVolume`, 2 % steps), screen brightness WMI (`ScreenBrightness.Adjust`, 5 %).
+- Hold-to-pick mode wheel (`dial_wheel`, on by default): hold past `dial_long_ms` opens it, turns move the highlight, a press picks,
+  3 s idle cancels. Verified with `DialListener.Simulate` (no hardware) through every path.

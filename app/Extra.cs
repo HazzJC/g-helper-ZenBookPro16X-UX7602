@@ -23,7 +23,8 @@ namespace GHelper
         const string EMPTY = "--------------";
 
 
-        private void SetKeyCombo(ComboBox combo, TextBox txbox, string name)
+        // shared with the ASUS Dial window (Zenbook16XDial)
+        public static void SetKeyCombo(ComboBox combo, TextBox txbox, string name)
         {
             if (combo is RComboBox rcombo) rcombo.NativeHeight = true;
 
@@ -148,190 +149,65 @@ namespace GHelper
             };
         }
 
-        // ZenBook Pro 16X: smooth brightness (multiplies with the four hardware levels above) and the MyASUS lighting agent guard
-        Slider? fineSlider;
-        Label? fineValueLabel;
-
-        public void VisualiseFineBrightness(int percent)
+        // ZenBook Pro 16X: keyboard brightness is one 0-100% slider in the main window (hardware level handled automatically),
+        // so the 4-step header slider is hidden here; what stays is the MyASUS lighting agent guard.
+        private void AddLightingAgentOption()
         {
-            if (fineSlider is null) return;
-            if (InvokeRequired) { BeginInvoke(() => VisualiseFineBrightness(percent)); return; }   // async: never block the dial thread
-            fineSlider.Value = percent;   // its ValueChanged re-applies the same value, which is harmless
-            fineValueLabel!.Text = percent + "%";
-        }
+            sliderBrightness.Visible = false;
 
-        private void AddFineBrightness()
-        {
-            int row = tableBacklight.RowCount;
+            int row = tableBacklight.RowCount++;
+            tableBacklight.RowStyles.Add(new RowStyle());
+
+            var checkAgent = new CheckBox { AutoSize = true, Margin = new Padding(Dpx(14), Dpx(6), 0, Dpx(3)), Text = "Stop MyASUS lighting agent (it re-applies ASUS's effect on Fn+F7)", Checked = AsusLightingAgent.IsEnabled, AccessibleName = "Stop MyASUS lighting agent" };
+            tableBacklight.Controls.Add(checkAgent, 0, row);
+            tableBacklight.SetColumnSpan(checkAgent, 5);
+            checkAgent.CheckedChanged += delegate { AsusLightingAgent.SetEnabled(checkAgent.Checked); };
+
+            // Rainbow / Colour Cycle: firmware (default) or rendered by G-Helper so the brightness slider dims them finely
+            int effectsRow = tableBacklight.RowCount;
             tableBacklight.RowCount += 2;
             tableBacklight.RowStyles.Add(new RowStyle());
             tableBacklight.RowStyles.Add(new RowStyle());
 
-            var label = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(Dpx(5), Dpx(6), Dpx(5), 0), Padding = new Padding(Dpx(9), Dpx(5), Dpx(7), Dpx(5)), Text = "Fine brightness" };
-            fineSlider = new Slider { Min = KeyboardBrightness.MinPercent, Max = 100, Step = 1, Value = KeyboardBrightness.Percent, Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(Dpx(5), Dpx(6), Dpx(5), 0), Height = Dpx(40), MinimumSize = new Size(Dpx(300), Dpx(40)), TabStop = true, AccessibleName = "Fine keyboard brightness" };
-            fineValueLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(Dpx(5), Dpx(6), Dpx(5), 0), Padding = new Padding(0, Dpx(5), 0, Dpx(5)), Text = KeyboardBrightness.Percent + "%" };
-
-            tableBacklight.Controls.Add(label, 0, row);
-            tableBacklight.Controls.Add(fineSlider, 1, row);
-            tableBacklight.SetColumnSpan(fineSlider, 3);
-            tableBacklight.Controls.Add(fineValueLabel, 4, row);
-
-            fineSlider.ValueChanged += delegate
+            var checkSoftware = new CheckBox { AutoSize = true, Margin = new Padding(Dpx(14), Dpx(6), 0, 0), Text = "Smooth dimming for Rainbow and Colour Cycle", Checked = Zenbook16XEffects.SoftwareHueEffects, AccessibleName = "Smooth dimming for Rainbow and Colour Cycle" };
+            var explain = new Label
             {
-                int percent = fineSlider.Value;
-                fineValueLabel.Text = percent + "%";
-                fineSlider.AccessibleName = "Fine keyboard brightness: " + percent + "%";
-                if (percent != KeyboardBrightness.Percent)
-                {
-                    InputDispatcher.EnsureFineHardwareLevel();
-                    KeyboardBrightness.Set(percent);
-                }
+                AutoSize = true,
+                MaximumSize = new Size(Dpx(940), 0),
+                Margin = new Padding(Dpx(52), 0, 0, Dpx(6)),
+                ForeColor = RForm.colorGray,
+                Text = "On: G-Helper draws these two effects, so the backlight brightness slider dims them all the way down. They stop when G-Helper is closed.\n" +
+                       "Off (default): the keyboard runs its own versions, which keep going without G-Helper but only dim in 4 steps.",
             };
+            tableBacklight.Controls.Add(checkSoftware, 0, effectsRow);
+            tableBacklight.SetColumnSpan(checkSoftware, 5);
+            tableBacklight.Controls.Add(explain, 0, effectsRow + 1);
+            tableBacklight.SetColumnSpan(explain, 5);
 
-            var checkAgent = new CheckBox { AutoSize = true, Margin = new Padding(Dpx(14), Dpx(6), 0, Dpx(3)), Text = "Stop MyASUS lighting agent (it re-applies ASUS's effect on Fn+F7)", Checked = AsusLightingAgent.IsEnabled, AccessibleName = "Stop MyASUS lighting agent" };
-            tableBacklight.Controls.Add(checkAgent, 0, row + 1);
-            tableBacklight.SetColumnSpan(checkAgent, 5);
-            checkAgent.CheckedChanged += delegate { AsusLightingAgent.SetEnabled(checkAgent.Checked); };
+            checkSoftware.CheckedChanged += delegate
+            {
+                AppConfig.Set("kb_software_effects", checkSoftware.Checked ? 1 : 0);
+                // switch the running effect over straight away if one of them is showing
+                if (Aura.Mode is AuraMode.AuraRainbow or AuraMode.AuraColorCycle) Task.Run(Aura.ApplyAura);
+            };
         }
 
         // The form is authored at 192 DPI and auto-scaled when it is shown, but controls created in code after
         // InitializeComponent are not, so size them from the current DPI (same baseline as the designer values).
         private int Dpx(int designerPx) => (int)Math.Round(designerPx * DeviceDpi / 192f);
 
-        // Dial modes: press cycles through the ticked modes, turning adjusts the current one
-        private void AddDialModePicker(List<ComboBox> modeBound)
+        // ASUS Dial (ZenBook Pro 16X): its settings live in their own window; here just a heading and a way there
+        private void AddDialLink()
         {
             int row = tableBindings.RowCount++;
             tableBindings.RowStyles.Add(new RowStyle());
 
-            var panel = new TableLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2, Anchor = AnchorStyles.Left | AnchorStyles.Top, Margin = new Padding(0, Dpx(8), 0, Dpx(3)) };
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            var heading = new Label { AutoSize = true, Font = new Font(Font, FontStyle.Bold), Anchor = AnchorStyles.Left, Margin = new Padding(0, Dpx(10), 0, 0), Padding = new Padding(Dpx(5), Dpx(11), 0, 0), Text = "ASUS Dial" };
+            var open = new RButton { Text = "ASUS Dial settings…", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Top, Margin = new Padding(Dpx(5), Dpx(16), Dpx(5), Dpx(3)), AccessibleName = "Open ASUS Dial settings" };
+            open.Click += (_, _) => Program.settingsForm.ShowDial();
 
-            var checkModes = new CheckBox { AutoSize = true, Margin = new Padding(Dpx(5), Dpx(3), 0, Dpx(3)), Text = "Dial modes: press switches, turn adjusts", Checked = AppConfig.Is("dial_modes_on"), AccessibleName = "Dial modes" };
-            var list = new CheckedListBox { CheckOnClick = true, IntegralHeight = false, Width = Dpx(420), Margin = new Padding(Dpx(25), Dpx(3), Dpx(5), Dpx(3)), AccessibleName = "Dial modes in order" };
-            var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Margin = new Padding(0, Dpx(3), 0, Dpx(3)) };
-            var buttonUp = new RButton { Text = "Move up", AutoSize = false, Size = new Size(Dpx(170), Dpx(46)), Margin = new Padding(Dpx(5), Dpx(3), Dpx(5), Dpx(3)), AccessibleName = "Move dial mode up" };
-            var buttonDown = new RButton { Text = "Move down", AutoSize = false, Size = buttonUp.Size, Margin = buttonUp.Margin, AccessibleName = "Move dial mode down" };
-            buttons.Controls.Add(buttonUp);
-            buttons.Controls.Add(buttonDown);
-
-            panel.Controls.Add(checkModes, 0, 0);
-            panel.SetColumnSpan(checkModes, 2);
-            panel.Controls.Add(list, 0, 1);
-            panel.Controls.Add(buttons, 1, 1);
-
-            tableBindings.Controls.Add(panel, 0, row);
-            tableBindings.SetColumnSpan(panel, 3);
-
-            bool loading = true;
-
-            void Save()
-            {
-                if (loading) return;
-                var ids = list.Items.Cast<DialMode>().Where((m, i) => list.GetItemChecked(i)).Select(m => m.Id);
-                DialModes.Save(ids);
-            }
-
-            void UpdateEnabled()
-            {
-                list.Enabled = buttonUp.Enabled = buttonDown.Enabled = checkModes.Checked;
-                foreach (var combo in modeBound) combo.Enabled = !checkModes.Checked;
-            }
-
-            list.DisplayMember = nameof(DialMode.Name);
-            foreach (var (mode, enabled) in DialModes.ForPicker())
-                list.SetItemChecked(list.Items.Add(mode), enabled);
-            // show every mode without a scrollbar; item height is only final once the control has its handle and scaled font
-            void FitList() => list.Height = list.ItemHeight * list.Items.Count + Dpx(10);
-            FitList();
-            list.HandleCreated += delegate { FitList(); };
-            list.FontChanged += delegate { FitList(); };
-            loading = false;
-            UpdateEnabled();
-
-            list.ItemCheck += delegate { BeginInvoke(Save); };   // checked state is applied after the event
-            checkModes.CheckedChanged += delegate
-            {
-                AppConfig.Set("dial_modes_on", checkModes.Checked ? 1 : 0);
-                UpdateEnabled();
-            };
-
-            void Move(int delta)
-            {
-                int i = list.SelectedIndex, j = i + delta;
-                if (i < 0 || j < 0 || j >= list.Items.Count) return;
-                var item = list.Items[i];
-                bool isChecked = list.GetItemChecked(i);
-                loading = true;
-                list.Items.RemoveAt(i);
-                list.Items.Insert(j, item);
-                list.SetItemChecked(j, isChecked);
-                list.SelectedIndex = j;
-                loading = false;
-                Save();
-            }
-
-            buttonUp.Click += delegate { Move(-1); };
-            buttonDown.Click += delegate { Move(1); };
-        }
-
-        // ASUS Dial (ZenBook Pro 16X): a heading, one binding row per dial gesture, dial modes, and the ASUS takeover option
-        private void AddDialBindings()
-        {
-            var rows = new (string key, string title)[]
-            {
-                ("dial_cw", "Dial right:"),
-                ("dial_ccw", "Dial left:"),
-                ("dial_press", "Dial press:"),
-                ("dial_double", "Dial double:"),
-                ("dial_long", "Dial hold:"),
-            };
-
-            int headingRow = tableBindings.RowCount++;
-            tableBindings.RowStyles.Add(new RowStyle());
-            var heading = new Label { AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, Dpx(10), 0, 0), Padding = new Padding(Dpx(5), Dpx(11), 0, 0), Text = "ASUS Dial" };
-            tableBindings.Controls.Add(heading, 0, headingRow);
-            tableBindings.SetColumnSpan(heading, 3);
-
-            var modeBound = new List<ComboBox>();   // bindings that dial modes take over while enabled
-
-            foreach (var (key, title) in rows)
-            {
-                int row = tableBindings.RowCount++;
-                tableBindings.RowStyles.Add(new RowStyle());
-
-                var label = new Label { AutoSize = true, Margin = new Padding(0), Padding = new Padding(Dpx(5), Dpx(11), 0, 0), Text = title };
-                var combo = new RComboBox { Dock = DockStyle.Top, FormattingEnabled = true, Margin = new Padding(Dpx(5), Dpx(3), Dpx(5), Dpx(3)), BorderColor = Color.White, ButtonColor = Color.FromArgb(255, 255, 255), AccessibleName = title };
-                var text = new RTextBox { Dock = DockStyle.Top, Margin = new Padding(Dpx(5), Dpx(3), Dpx(5), Dpx(3)), PlaceholderText = "action", TabStop = false };
-
-                tableBindings.Controls.Add(label, 0, row);
-                tableBindings.Controls.Add(combo, 1, row);
-                tableBindings.Controls.Add(text, 2, row);
-
-                SetKeyCombo(combo, text, key);
-                if (key is "dial_cw" or "dial_ccw" or "dial_press") modeBound.Add(combo);
-            }
-
-            AddDialModePicker(modeBound);
-
-            int checkRow = tableBindings.RowCount++;
-            tableBindings.RowStyles.Add(new RowStyle());
-            var checkTakeover = new CheckBox { AutoSize = true, Margin = new Padding(Dpx(5), Dpx(3), 0, Dpx(3)), Text = "Take over dial from ASUS software (needs admin)", Checked = DialTakeover.IsEnabled(), AccessibleName = "Take over dial from ASUS software" };
-            tableBindings.Controls.Add(checkTakeover, 0, checkRow);
-            tableBindings.SetColumnSpan(checkTakeover, 3);
-            bool reverting = false;
-            checkTakeover.CheckedChanged += delegate
-            {
-                if (reverting) return;
-                if (!DialTakeover.Apply(checkTakeover.Checked))
-                {
-                    MessageBox.Show("Stopping the ASUS Dial service needs administrator rights. Restart G-Helper as administrator and try again.", "ASUS Dial", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    reverting = true;
-                    checkTakeover.Checked = DialTakeover.IsEnabled();
-                    reverting = false;
-                }
-            };
+            tableBindings.Controls.Add(heading, 0, row);
+            tableBindings.Controls.Add(open, 1, row);
         }
 
         public Extra()
@@ -519,8 +395,8 @@ namespace GHelper
             }
 
 
-            if (DialListener.IsSupported()) AddDialBindings();
-            if (AppConfig.IsZenbookPro16X()) AddFineBrightness();
+            if (DialListener.IsSupported()) AddDialLink();
+            if (AppConfig.IsZenbookPro16X()) AddLightingAgentOption();
 
             InitTheme();
             Shown += Keyboard_Shown;

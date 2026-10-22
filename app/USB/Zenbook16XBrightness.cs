@@ -44,26 +44,47 @@ namespace GHelper.USB
         }
 
         /// <summary>Colour gain (0-1) for a percentage; 100% is exactly 1.</summary>
-        public static double Gain(int percent)
+        public static double Gain(int percent) => GainAt(Math.Max(percent, MinPercent));
+
+        /// <summary>
+        /// The same curve for any value, including the fractional ones a fade passes through. Below 1% it falls linearly to 0, so a
+        /// fade can reach black; at 1% and above it is the visible-floor curve.
+        /// </summary>
+        public static double GainAt(double percent)
         {
             if (percent >= 100) return 1.0;
-            percent = Math.Max(percent, MinPercent);
+            if (percent <= 0) return 0.0;
+            double atMin = FloorValue / 255.0;
+            if (percent < MinPercent) return atMin * percent / MinPercent;
             return (FloorValue + (Math.Exp(K * (percent - 1)) - 1) / K) / 255.0;
         }
 
-        public static Color Apply(Color c) => Apply(c, Percent);
-
-        public static Color Apply(Color c, int percent)
+        /// <summary>The gain for what is being shown right now (follows fades), and whether the visible floor applies.</summary>
+        public static (double gain, bool floor) Snapshot()
         {
-            if (percent >= 100) return c;
+            double shown = Shown;
+            return (GainAt(shown), shown >= MinPercent);
+        }
 
-            double gain = Gain(percent);
+        public static Color Apply(Color c)
+        {
+            var (gain, floor) = Snapshot();
+            return Apply(c, gain, floor);
+        }
+
+        public static Color Apply(Color c, int percent) => Apply(c, Gain(percent), true);
+
+        public static Color Apply(Color c, double gain, bool floor)
+        {
+            if (gain >= 1.0) return c;
+
             double r = c.R * gain, g = c.G * gain, b = c.B * gain;
 
             // Never let a clearly lit colour fall below the visible floor: lift it, keeping its hue, rather than letting it vanish.
+            // Not during a fade to off, which has to be allowed to reach black.
             int origMax = Math.Max(c.R, Math.Max(c.G, c.B));
             double max = Math.Max(r, Math.Max(g, b));
-            if (origMax >= FloorAppliesFrom && max < FloorValue)
+            if (floor && origMax >= FloorAppliesFrom && max > 0 && max < FloorValue)
             {
                 double lift = FloorValue / max;
                 r *= lift; g *= lift; b *= lift;
@@ -72,11 +93,124 @@ namespace GHelper.USB
             return Color.FromArgb(c.A, (int)Math.Round(Math.Min(255, r)), (int)Math.Round(Math.Min(255, g)), (int)Math.Round(Math.Min(255, b)));
         }
 
+        // ---- smooth fades ----
+        // The percentage the user chose is the target; what is shown eases towards it along the same perceptual curve, re-sending
+        // through the no-blank refresh path. Interactive changes are short (they start moving at once, so they never feel late);
+        // the idle timeout fades out and back in more slowly.
+
+        static readonly object fadeGate = new();
+        static double shownPercent = -1;   // -1 = not faded yet: show the target
+        static double fadeFrom, fadeTo;
+        static long fadeStart;
+        static int fadeMs, fadeGeneration;
+        static Action? fadeDone;
+        static System.Threading.Timer? fadeTimer;
+
+        static double Shown
+        {
+            get { lock (fadeGate) return shownPercent < 0 ? Percent : shownPercent; }
+        }
+
+        public static int InteractiveFadeMs => Math.Max(0, AppConfig.Get("kb_fade_ms", 120));
+        public static int IdleFadeMs => Math.Max(0, AppConfig.Get("kb_fade_idle_ms", 400));
+
+        /// <summary>Fades are only possible where the colour gain is what dims the keyboard.</summary>
+        public static bool CanFade => AppConfig.IsZenbookPro16X() && IsColourDriven(Aura.Mode);
+
+        /// <summary>Eases what is shown to <paramref name="target"/> percent over <paramref name="ms"/>; then runs done.</summary>
+        public static void FadeTo(double target, int ms, Action? done = null)
+        {
+            lock (fadeGate)
+            {
+                fadeGeneration++;
+                fadeFrom = shownPercent < 0 ? Percent : shownPercent;
+                fadeTo = target;
+                fadeStart = Environment.TickCount64;
+                fadeMs = ms;
+                fadeDone = done;
+
+                if (ms <= 0 || !CanFade)
+                {
+                    shownPercent = target;
+                    fadeTimer?.Dispose();
+                    fadeTimer = null;
+                    fadeDone = null;
+                }
+                else
+                {
+                    fadeTimer ??= new System.Threading.Timer(_ => FadeTick(), null, 0, 16);
+                    return;
+                }
+            }
+
+            Refresh();
+            done?.Invoke();
+        }
+
+        static void FadeTick()
+        {
+            Action? done = null;
+            lock (fadeGate)
+            {
+                double t = fadeMs <= 0 ? 1 : (Environment.TickCount64 - fadeStart) / (double)fadeMs;
+                if (t >= 1)
+                {
+                    shownPercent = fadeTo;
+                    fadeTimer?.Dispose();
+                    fadeTimer = null;
+                    done = fadeDone;
+                    fadeDone = null;
+                }
+                else
+                {
+                    double s = t * t * (3 - 2 * t);   // smoothstep: gentle start and finish
+                    shownPercent = fadeFrom + (fadeTo - fadeFrom) * s;
+                }
+            }
+
+            Refresh();
+            try { done?.Invoke(); }
+            catch (Exception ex) { Logger.WriteLine("Fade completion failed: " + ex.Message); }
+        }
+
+        /// <summary>Idle timeout: fade to black, then switch the backlight off. Instant where a fade isn't possible.</summary>
+        public static void FadeOutThen(Action off)
+        {
+            if (!CanFade || IdleFadeMs == 0) { off(); return; }
+            int generation;
+            lock (fadeGate) generation = fadeGeneration + 1;
+            FadeTo(0, IdleFadeMs, () =>
+            {
+                // a newer fade (the user came back mid-fade) cancels switching off
+                lock (fadeGate) if (fadeGeneration != generation) return;
+                off();
+            });
+        }
+
+        /// <summary>Wake from the idle timeout: start from black, switch the backlight on, then fade up to the chosen brightness.</summary>
+        public static void FadeInWith(Action on)
+        {
+            if (!CanFade || IdleFadeMs == 0)
+            {
+                lock (fadeGate) shownPercent = -1;
+                on();
+                return;
+            }
+            lock (fadeGate) { fadeGeneration++; shownPercent = 0; fadeTimer?.Dispose(); fadeTimer = null; fadeDone = null; }
+            on();
+            FadeTo(Percent, IdleFadeMs);
+        }
+
         /// <summary>
         /// Firmware effects that pick their own colours (the colour in the mode-set packet is ignored) can only be dimmed by the
         /// four hardware steps.
         /// </summary>
-        public static bool IsColourDriven(AuraMode mode) => mode is not (AuraMode.AuraColorCycle or AuraMode.AuraRainbow or AuraMode.Rain);
+        public static bool IsColourDriven(AuraMode mode) => mode switch
+        {
+            AuraMode.Rain => false,   // firmware Raindrop: its own red / white / blue
+            AuraMode.AuraColorCycle or AuraMode.AuraRainbow => Zenbook16XEffects.SoftwareHueEffects,
+            _ => true,
+        };
 
         static readonly object refreshGate = new();
         static bool refreshPending, refreshRunning;
@@ -84,12 +218,56 @@ namespace GHelper.USB
         /// <summary>Sets the percentage and re-sends whatever is showing.</summary>
         public static void Set(int percent)
         {
-            AppConfig.Set(KEY, Math.Clamp(percent, MinPercent, 100));
-            Refresh();
+            int p = Math.Clamp(percent, MinPercent, 100);
+            // pin what is showing now before the stored value changes, so the fade starts from it rather than from the new value
+            lock (fadeGate) if (shownPercent < 0) shownPercent = Percent;
+            AppConfig.Set(KEY, p);
+            FadeTo(p, InteractiveFadeMs);   // eases there, re-sending as it goes (instant where fades are off or impossible)
+            RaiseChanged();
         }
 
-        // Dial stops: the step grows with the level (about 1/8 of it, 1-5%), so the dim end - where one percent is a visible change and
-        // the eye is most sensitive - is stepped finely, and the bright end quickly. 1, 2, 3 ... 12, 14, 16 ... 100.
+        /// <summary>Raised whenever the brightness the user sees may have changed (level, gain, on/off), so every control can follow.</summary>
+        public static event Action? Changed;
+
+        public static void RaiseChanged()
+        {
+            try { Changed?.Invoke(); }
+            catch (Exception ex) { Logger.WriteLine("Brightness change handler failed: " + ex.Message); }
+        }
+
+        /// <summary>
+        /// The one brightness the UI shows: 0 = off (hardware level 0), 1-100 = hardware level 3 with the colour gain.
+        /// The hardware level is otherwise managed automatically, because level 3 gives the finest range.
+        /// </summary>
+        public static int Unified => GHelper.Input.InputDispatcher.GetBacklight() == 0 ? 0 : Percent;
+
+        public static void SetUnified(int value)
+        {
+            if (value <= 0)
+            {
+                int level = GHelper.Input.InputDispatcher.GetBacklight();
+                if (level > 0) GHelper.Input.InputDispatcher.SetBacklight(-level, true, toast: false);
+                return;
+            }
+
+            // Firmware effects that choose their own colours ignore the colour gain, so the slider drives the four hardware steps
+            // instead (thirds of the range). The percentage is still remembered for colour-driven modes.
+            if (!IsColourDriven(Aura.Mode))
+            {
+                int target = value <= 33 ? 1 : value <= 66 ? 2 : 3;
+                int current = GHelper.Input.InputDispatcher.GetBacklight();
+                if (target != current) GHelper.Input.InputDispatcher.SetBacklight(target - current, true, toast: false);
+                Set(value);
+                return;
+            }
+
+            GHelper.Input.InputDispatcher.EnsureFineHardwareLevel();
+            Set(value);
+        }
+
+        // Dial stops: the step grows with the level (about 1/8 of it) so the dim end - where one percent is a visible change - is stepped
+        // finely, peaks at 4% in the middle, then eases back to 2% towards the top so full brightness is approached smoothly:
+        // 1, 2 ... 12, 14 ... 33, 37, 41 ... 73, 76, 79 ... 85, 87, 89 ... 99, 100 (42 stops).
         public static readonly int[] Stops = BuildStops();
 
         static int[] BuildStops()
@@ -98,7 +276,9 @@ namespace GHelper.USB
             int p = MinPercent;
             while (p < 100)
             {
-                p = Math.Min(100, p + Math.Clamp((int)Math.Round(p / 8.0, MidpointRounding.AwayFromZero), 1, 5));
+                int rise = (int)Math.Round(p / 8.0, MidpointRounding.AwayFromZero);
+                int fall = Math.Max(2, (int)Math.Round((112 - p) / 12.0, MidpointRounding.AwayFromZero));
+                p = Math.Min(100, p + Math.Clamp(Math.Min(rise, fall), 1, 4));
                 stops.Add(p);
             }
             return stops.ToArray();

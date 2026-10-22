@@ -116,11 +116,9 @@ namespace GHelper.Helpers
 
         protected static float ToastScale = 1f;
 
-        public static void DrawToast(Graphics g, Rectangle bound, string text, ToastIcon? toastIcon)
+        /// <summary>Draws a toast icon (bitmap, or a font glyph for the newer ones) into the box. Returns false if there is none.</summary>
+        public static bool DrawIcon(Graphics g, ToastIcon? toastIcon, RectangleF box)
         {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.FillRoundedRectangle(_toastBrush, bound, 10);
-
             using Bitmap? icon = toastIcon switch
             {
                 ToastIcon.BrightnessUp   => Properties.Resources.brightness_up,
@@ -137,18 +135,30 @@ namespace GHelper.Helpers
                 _                        => null
             };
 
-            bool hasIcon = icon is not null || (toastIcon is not null && glyphIcons.ContainsKey(toastIcon.Value));
-
             if (icon is not null)
             {
-                g.DrawImage(icon, 18, 18, 64, 64);
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.DrawImage(icon, box);
+                return true;
             }
-            else if (hasIcon)
+
+            if (toastIcon is not null && glyphIcons.TryGetValue(toastIcon.Value, out var glyph))
             {
                 g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
-                using var font = new Font(glyphFont, 58f, FontStyle.Regular, GraphicsUnit.Pixel);
-                g.DrawString(glyphIcons[toastIcon!.Value], font, _toastTextBrush, new RectangleF(18, 18, 64, 64), _toastFormat);
+                using var font = new Font(glyphFont, box.Height * 0.9f, FontStyle.Regular, GraphicsUnit.Pixel);
+                g.DrawString(glyph, font, _toastTextBrush, box, _toastFormat);
+                return true;
             }
+
+            return false;
+        }
+
+        public static void DrawToast(Graphics g, Rectangle bound, string text, ToastIcon? toastIcon)
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.FillRoundedRectangle(_toastBrush, bound, 10);
+
+            bool hasIcon = DrawIcon(g, toastIcon, new RectangleF(18, 18, 64, 64));
 
             // text is centred in the space right of the icon (or in the whole toast without one)
             float textCentre = hasIcon ? (18 + 64 + 16 + bound.Width - 20) / 2f : bound.Width / 2f;
@@ -165,8 +175,12 @@ namespace GHelper.Helpers
         }
 
 
+        /// <summary>Toasts are skipped until this time (Environment.TickCount64): the dial's ring is showing the same change.</summary>
+        public static long SuppressUntil;
+
         public void RunToast(string text, ToastIcon? icon = null)
         {
+            if (Environment.TickCount64 < SuppressUntil) return;
 
             if (AppConfig.Is("disable_osd")) return;
 

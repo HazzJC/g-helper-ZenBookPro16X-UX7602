@@ -87,7 +87,7 @@ namespace GHelper.USB
         /// </summary>
         public static void Stream(Color[] frame)
         {
-            int percent = KeyboardBrightness.Percent;   // fine brightness, read once per frame
+            var (fineGain, fineFloor) = KeyboardBrightness.Snapshot();   // fine brightness (follows fades), read once per frame
             for (int chunk = 0; chunk < CHUNKS; chunk++)
             {
                 int start = chunk * PER_CHUNK;
@@ -108,7 +108,7 @@ namespace GHelper.USB
                 {
                     int slot = start + k;
                     Color c = slot < frame.Length ? frame[slot] : Color.Black;
-                    c = KeyboardBrightness.Apply(c, percent);
+                    c = KeyboardBrightness.Apply(c, fineGain, fineFloor);
                     pkt[9 + k * 3] = c.R;
                     pkt[9 + k * 3 + 1] = c.G;
                     pkt[9 + k * 3 + 2] = c.B;

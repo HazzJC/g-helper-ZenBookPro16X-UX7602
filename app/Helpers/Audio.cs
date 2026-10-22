@@ -22,6 +22,45 @@ namespace GHelper.Helpers
             }
         }
 
+        /// <summary>Master volume of the default playback device, 0-100 (-1 if unavailable).</summary>
+        public static int GetVolume()
+        {
+            try
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                return (int)Math.Round(device.AudioEndpointVolume.MasterVolumeLevelScalar * 100);
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLine("Volume read failed: " + ex.Message);
+                return -1;
+            }
+        }
+
+        /// <summary>
+        /// Changes the master volume by delta percent, set directly (exact steps, no Windows volume flyout). Turning up unmutes.
+        /// Returns the new volume (or -1).
+        /// </summary>
+        public static int AdjustVolume(int delta)
+        {
+            try
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                var volume = device.AudioEndpointVolume;
+                int value = Math.Clamp((int)Math.Round(volume.MasterVolumeLevelScalar * 100) + delta, 0, 100);
+                volume.MasterVolumeLevelScalar = value / 100f;
+                if (delta > 0 && volume.Mute) volume.Mute = false;
+                return value;
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLine("Volume change failed: " + ex.Message);
+                return -1;
+            }
+        }
+
         public static bool ToggleMicMute()
         {
             using (var enumerator = new MMDeviceEnumerator())

@@ -128,16 +128,32 @@ namespace GHelper.USB
     /// </summary>
     public static class Zenbook16XEffects
     {
+        /// <summary>
+        /// Rainbow and Colour Cycle run in the keyboard firmware by default (they keep going when G-Helper is closed, but only dim in the
+        /// four hardware steps). kb_software_effects = 1 renders them here instead so fine brightness dims them (Extra settings option).
+        /// </summary>
+        public static bool SoftwareHueEffects => AppConfig.Is("kb_software_effects");
+
+        static bool IsHueEffect(AuraMode mode) => mode is AuraMode.AuraRainbow or AuraMode.AuraColorCycle;
+
         public static bool IsPreset(AuraMode mode) => mode switch
         {
             AuraMode.RAIN_COLOR or AuraMode.CUSTOM_PERKEY => true,
             AuraMode.AURORA or AuraMode.LAVA or AuraMode.SONAR
                 or AuraMode.FIREFLIES or AuraMode.EMBER => true,
+            AuraMode.AuraRainbow or AuraMode.AuraColorCycle => SoftwareHueEffects,
             _ => false,
         };
 
         public static PerKeyEffect? Create(AuraMode mode)
         {
+            if (IsHueEffect(mode))
+            {
+                if (!SoftwareHueEffects) return null;
+                double hueSpeed = HueEffect.SpeedFactor(Aura.Speed);
+                return mode == AuraMode.AuraRainbow ? new RainbowEffect(hueSpeed) : new ColorCycleEffect(hueSpeed);
+            }
+
             if (!Zenbook16XSettings.HasPalette(mode)) return null;
 
             var palette = Zenbook16XSettings.GetPalette(mode);
@@ -633,6 +649,84 @@ namespace GHelper.USB
             if (h > 0.72) return Lerp(main, Color.White, (h - 0.72) / 0.28);
             if (h > 0.30) return Lerp(tail, main, (h - 0.30) / 0.42);
             return Scale(tail, h / 0.30);
+        }
+    }
+
+    /// <summary>
+    /// Software versions of the firmware Rainbow and Colour Cycle. The firmware effects pick their own colours, so the fine
+    /// brightness gain (applied to every streamed colour) could not dim them; rendered here they dim like everything else.
+    /// Speed follows the keyboard's Slow / Normal / Fast setting. Used only when kb_software_effects = 1 (off by default).
+    /// </summary>
+    public abstract class HueEffect : MatrixEffect
+    {
+        protected HueEffect(double speed) : base(new[] { Color.White }, speed) { }
+
+        public static double SpeedFactor(AuraSpeed speed) => speed switch
+        {
+            AuraSpeed.Slow => 0.5,
+            AuraSpeed.Fast => 2.0,
+            _ => 1.0,
+        };
+
+        /// <summary>Fully saturated hue, h in turns (0..1 wraps).</summary>
+        protected static Color Hue(double h)
+        {
+            h = (h % 1 + 1) % 1 * 6;
+            int i = (int)h;
+            double f = h - i;
+            int up = (int)(255 * f), down = (int)(255 * (1 - f));
+            return i switch
+            {
+                0 => Color.FromArgb(255, up, 0),
+                1 => Color.FromArgb(down, 255, 0),
+                2 => Color.FromArgb(0, 255, up),
+                3 => Color.FromArgb(0, down, 255),
+                4 => Color.FromArgb(up, 0, 255),
+                _ => Color.FromArgb(255, 0, down),
+            };
+        }
+    }
+
+    /// <summary>A rainbow travelling across the keyboard, with a slight lean so rows don't move in lockstep.</summary>
+    public class RainbowEffect : HueEffect
+    {
+        const double CyclesPerSecond = 0.12;   // one full hue turn every ~8 s at Normal
+        const double Spread = 0.85;            // how much of the rainbow is on the keyboard at once
+
+        public RainbowEffect(double speed) : base(speed) { }
+
+        Color At(double x, double y, double t) => Hue((x + y * 0.35) / W * Spread - t);
+
+        public override void Render(Color[] frame, double time, double dt)
+        {
+            double t = time * CyclesPerSecond * speed;
+
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                    frame[SlotAt(x, y)] = At(x, y, t);
+
+            Bars(frame, At(-1, H / 2.0, t), At(W, H / 2.0, t));
+            frame[Zenbook16X.SLOT_LOGO] = At(W / 2.0, -1, t);
+        }
+    }
+
+    /// <summary>The whole keyboard, bars and logo stepping smoothly through the hues together.</summary>
+    public class ColorCycleEffect : HueEffect
+    {
+        const double CyclesPerSecond = 0.08;   // one full turn every ~12 s at Normal
+
+        public ColorCycleEffect(double speed) : base(speed) { }
+
+        public override void Render(Color[] frame, double time, double dt)
+        {
+            Color c = Hue(time * CyclesPerSecond * speed);
+
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                    frame[SlotAt(x, y)] = c;
+
+            Bars(frame, c, c);
+            frame[Zenbook16X.SLOT_LOGO] = c;
         }
     }
 }

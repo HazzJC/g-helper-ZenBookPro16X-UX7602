@@ -22,7 +22,7 @@
     <!-- Fork versioning: 1.x marks the UX7602 fork, currently merged up to upstream 0.287.
          1.x also reads as newer than upstream's 0.28x, so the updater (which checks
          seerge/g-helper) won't offer to "update" this build to one without UX7602 support. -->
-    <AssemblyVersion>1.2</AssemblyVersion>
+    <AssemblyVersion>1.3</AssemblyVersion>
     <NoWarn>$(NoWarn);WFO1000</NoWarn>
   </PropertyGroup>
 

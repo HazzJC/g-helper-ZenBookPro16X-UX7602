@@ -17,6 +17,12 @@ public static class ControlHelper
     public static float Scale => _scale;
     public static bool DarkMode => _darkMode;
 
+    /// <summary>
+    /// Forms here are authored at 192 DPI and auto-scaled when shown, but controls created in code afterwards are not, so size
+    /// them from the control's current DPI using the same baseline as the designer values.
+    /// </summary>
+    public static int Dpx(Control control, int designerPx) => (int)Math.Round(designerPx * control.DeviceDpi / 192f);
+
     public static void Adjust(RForm container, bool invert = false)
     {
 

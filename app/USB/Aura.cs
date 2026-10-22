@@ -881,6 +881,7 @@ namespace GHelper.USB
             // lets a streamed frame pre-empt a firmware effect that's still animating on the MCU.
             // EnsureDirect rather than DirectEnable so the continuously-streaming modes don't
             // re-blank the buffer on every frame. See Zenbook16X.DirectEnable.
+            var (fineGain, fineFloor) = KeyboardBrightness.Snapshot();   // fine brightness, read once per frame
             Zenbook16X.EnsureDirect();
 
             for (int chunk = 0; chunk < 11; chunk++)
@@ -902,7 +903,7 @@ namespace GHelper.USB
                 for (int k = 0; k < count; k++)
                 {
                     int keyIdx = chunkStart + k;
-                    Color px = KeyboardBrightness.Apply(buffer[keyIdx]);   // fine brightness
+                    Color px = KeyboardBrightness.Apply(buffer[keyIdx], fineGain, fineFloor);   // fine brightness
                     pkt[9 + k * 3]     = px.R;
                     pkt[9 + k * 3 + 1] = px.G;
                     pkt[9 + k * 3 + 2] = px.B;

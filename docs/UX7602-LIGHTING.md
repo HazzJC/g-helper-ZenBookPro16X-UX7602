@@ -320,3 +320,13 @@ Config: `kb_fine` (1-100, default 100 = unchanged), the dial moves along `Keyboa
   mode falls back to the four hardware steps for them.
 - `AsusLightingAgent` (option "Stop MyASUS lighting agent") keeps `AsusExclusiveAgent.exe` stopped (checked every 10 s), because it
   re-applies ASUS's saved effect on `Fn+F7`.
+
+### v1.3 changes
+- **One slider**: `KeyboardBrightness.Unified` (0 = hardware off, 1-100 = hardware 3 + gain) drives *Backlight brightness* in the main
+  window; Extra no longer has the 4-step slider or a separate fine row. For firmware effects that ignore the gain the slider maps to the
+  hardware steps (1-33 / 34-66 / 67-100 -> levels 1 / 2 / 3). A `Changed` event keeps the slider, dial and Fn+F7 in step.
+- **Fades**: what is shown eases to the target (`kb_fade_ms`, default 120) along the same curve; the idle timeout fades to black before
+  hardware off and fades up on wake (`kb_fade_idle_ms`, default 400). Verified at packet level: monotonic, reaches 0 before switching off,
+  no blanking packet in per-key modes.
+- **Software Rainbow / Colour Cycle** (`kb_software_effects`, off by default; Extra option "Smooth dimming for Rainbow and Colour Cycle").
+- Dial steps (`Stops`) taper to 2 % near the top: 42 stops.

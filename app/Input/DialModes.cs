@@ -11,8 +11,8 @@ namespace GHelper.Input
 
         public static readonly DialMode[] All =
         [
-            new("volume", "Volume", "volume_up", "volume_down", ToastIcon.Volume),
-            new("brightness", "Screen brightness", "brightness_up", "brightness_down", ToastIcon.BrightnessUp, "Brightness"),
+            new("volume", "Volume", "volume_fine_up", "volume_fine_down", ToastIcon.Volume),
+            new("brightness", "Screen brightness", "screen_fine_up", "screen_fine_down", ToastIcon.BrightnessUp, "Brightness"),
             new("backlight", "Keyboard backlight", "backlight_fine_up", "backlight_fine_down", ToastIcon.BacklightUp, "Backlight"),
             new("media", "Next / previous track", "next_track", "prev_track", ToastIcon.Media, "Tracks"),
             new("scroll", "Scroll", "scroll_down", "scroll_up", ToastIcon.Scroll),
@@ -59,7 +59,8 @@ namespace GHelper.Input
             var current = Current();
             var next = list[(list.IndexOf(current!) + 1) % list.Count];
             AppConfig.Set("dial_mode_current", next.Id);
-            Program.toast?.RunToast(next.ToastName ?? next.Name, next.Icon);
+            if (DialOsd.Enabled) DialOsd.Show(next, 0);   // the ring: which mode, and where it is now
+            else Program.toast?.RunToast(next.ToastName ?? next.Name, next.Icon);
             return next;
         }
     }

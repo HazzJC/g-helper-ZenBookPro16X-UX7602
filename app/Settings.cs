@@ -1393,7 +1393,7 @@ namespace GHelper
                     comboKeyboard.SelectedIndex = comboKeyboard.Items.Count - 1;
             }
 
-            Program.toast.RunToast(comboKeyboard.GetItemText(comboKeyboard.SelectedItem), ToastIcon.BacklightUp);
+            Program.toast.RunToast(comboKeyboard.GetItemText(comboKeyboard.SelectedItem), AppConfig.IsZenbookPro16X() ? ToastIcon.Lighting : ToastIcon.BacklightUp);
         }
 
         private void ComboKeyboard_SelectedValueChanged(object? sender, EventArgs e)
@@ -1427,27 +1427,87 @@ namespace GHelper
 
             RButton Make(string text, Action onClick)
             {
+                // same size and spacing as the Color / Extra buttons in the row above
                 var button = new RButton
                 {
                     Text = text,
                     Dock = DockStyle.Top,
                     FlatStyle = FlatStyle.Flat,
-                    Height = comboKeyboard.Height,
-                    Margin = comboKeyboard.Margin,
-                    BorderRadius = 2,
+                    Height = buttonKeyboard.Height,
+                    Margin = buttonKeyboard.Margin,
+                    BorderRadius = buttonKeyboard.BorderRadius,
+                    Secondary = buttonKeyboard.Secondary,
                 };
                 button.Click += (_, _) => onClick();
                 return button;
             }
 
-            // Two direct buttons beside the mode dropdown: the Studio (modes, palettes, hiding) and
-            // the per-key editor, which stays one click away rather than living inside the Studio.
+            // The designer fills row 1 (mode dropdown, Color, Extra). The 16X adds row 2 - Lighting Studio and the per-key
+            // editor, one click each (the third cell is kept for the ASUS Dial window) - and row 3, one keyboard brightness
+            // (0 = off, 1-100% = hardware level 3 plus the colour gain). Cells are set explicitly so nothing reflows.
+            tableLayoutKeyboard.RowCount = 3;
+            tableLayoutKeyboard.RowStyles.Clear();
+            for (int i = 0; i < 3; i++) tableLayoutKeyboard.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
             buttonPerKey = Make("Per-Key Editor", ShowPerKeyEditor);
-            tableLayoutKeyboard.Controls.Add(Make("Lighting Studio", ShowStudio), 1, 0);
-            tableLayoutKeyboard.Controls.Add(buttonPerKey, 2, 0);
+            tableLayoutKeyboard.Controls.Add(Make("Lighting Studio", ShowStudio), 0, 1);
+            tableLayoutKeyboard.Controls.Add(buttonPerKey, 1, 1);
+            if (DialListener.IsSupported()) tableLayoutKeyboard.Controls.Add(Make("ASUS Dial", ShowDial), 2, 1);
+
+            var brightnessRow = BuildKeyboardBrightnessRow();
+            tableLayoutKeyboard.Controls.Add(brightnessRow, 0, 2);
+            tableLayoutKeyboard.SetColumnSpan(brightnessRow, 3);
 
             // InitAura runs after the form's own InitTheme, so these controls need theming themselves.
             ControlHelper.Adjust(this);
+        }
+
+        Slider? sliderKeyboardBrightness;
+        Label? labelKeyboardBrightnessValue;
+        bool syncingKeyboardBrightness;
+
+        static string FormatKeyboardBrightness(int value) => value == 0 ? "Off" : value + "%";
+
+        private Control BuildKeyboardBrightnessRow()
+        {
+            int Dpx(int px) => ControlHelper.Dpx(this, px);
+
+            var row = new TableLayoutPanel { ColumnCount = 3, RowCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Top, Margin = new Padding(0, Dpx(4), 0, 0) };
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+            var label = new Label { Text = "Backlight brightness", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(Dpx(8), 0, Dpx(12), 0) };
+            sliderKeyboardBrightness = new Slider { Min = 0, Max = 100, Step = 1, Value = KeyboardBrightness.Unified, Dock = DockStyle.Fill, Height = Dpx(40), Margin = new Padding(0), TabStop = true, AccessibleName = "Keyboard brightness" };
+            labelKeyboardBrightnessValue = new Label { AutoSize = true, Anchor = AnchorStyles.Left, MinimumSize = new Size(Dpx(80), 0), Margin = new Padding(Dpx(12), 0, Dpx(8), 0), Text = FormatKeyboardBrightness(KeyboardBrightness.Unified) };
+
+            row.Controls.Add(label, 0, 0);
+            row.Controls.Add(sliderKeyboardBrightness, 1, 0);
+            row.Controls.Add(labelKeyboardBrightnessValue, 2, 0);
+
+            sliderKeyboardBrightness.ValueChanged += (_, _) =>
+            {
+                int value = sliderKeyboardBrightness.Value;
+                labelKeyboardBrightnessValue.Text = FormatKeyboardBrightness(value);
+                sliderKeyboardBrightness.AccessibleName = "Keyboard brightness: " + FormatKeyboardBrightness(value);
+                if (!syncingKeyboardBrightness) KeyboardBrightness.SetUnified(value);
+            };
+
+            // follow changes made elsewhere (dial, Fn+F7, idle timeout) - but never fight a drag in progress
+            KeyboardBrightness.Changed += () =>
+            {
+                if (!IsHandleCreated || IsDisposed) return;
+                BeginInvoke(() =>
+                {
+                    if (sliderKeyboardBrightness.Capture) return;
+                    syncingKeyboardBrightness = true;
+                    try { sliderKeyboardBrightness.Value = KeyboardBrightness.Unified; }
+                    finally { syncingKeyboardBrightness = false; }
+                    labelKeyboardBrightnessValue.Text = FormatKeyboardBrightness(sliderKeyboardBrightness.Value);
+                });
+            };
+
+            return row;
         }
 
         private Dictionary<AuraMode, string> VisibleKeyboardModes()
@@ -1476,6 +1536,22 @@ namespace GHelper
                 comboKeyboard.SelectedValue = (AuraMode)AppConfig.Get("aura_mode");
             }
             finally { comboKeyboard.SelectedValueChanged += ComboKeyboard_SelectedValueChanged; }
+        }
+
+        private Zenbook16XDial? dialWindow;
+
+        public void ShowDial()
+        {
+            if (dialWindow is not null && !dialWindow.IsDisposed)
+            {
+                dialWindow.Activate();
+                return;
+            }
+
+            dialWindow = new Zenbook16XDial();
+            dialWindow.TopMost = AppConfig.Is("topmost");
+            dialWindow.FormClosed += (_, _) => dialWindow = null;
+            dialWindow.Show();
         }
 
         private Zenbook16XStudio? studio;

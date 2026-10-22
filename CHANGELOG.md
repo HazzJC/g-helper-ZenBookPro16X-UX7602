@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-22
+
+### Added
+- **ASUS Dial window** (main window, Laptop Keyboard > *ASUS Dial*): live connection status and a ring that follows the dial, a switch
+  between *Dial modes* and *Simple bindings* (only the active one is shown), double press / hold, and the options. Replaces the dial
+  rows in Extra settings, which now link to it.
+- **Dial on-screen ring**: in dial modes, turning shows the mode's icon in a ring with its value (volume, screen brightness, backlight
+  as an arc; performance and lighting as segments) instead of a text toast. Volume (2 %) and screen brightness (5 %) are set directly,
+  so steps are exact and no Windows flyout appears.
+- **Hold-to-pick mode wheel**: hold the dial to see every dial mode around a wheel, turn to choose, press to pick; 3 s idle cancels.
+  Optional (ASUS Dial window); off, a press cycles modes as before. The on-screen ring is optional too (off: text toasts).
+- **Smooth brightness fades**: brightness changes ease over ~120 ms and the idle timeout fades out (and back in) over ~400 ms, through
+  the same no-blank path (`kb_fade_ms`, `kb_fade_idle_ms`, 0 = instant).
+- **Smooth dimming for Rainbow and Colour Cycle** (Extra > Laptop Backlight, off by default): G-Helper draws them so the brightness
+  slider dims them fully; off, the keyboard's own firmware versions run (they keep going without G-Helper, 4-step dimming).
+
+### Changed
+- **One keyboard brightness slider** in the main window (*Backlight brightness*, 0 = off), replacing the two sliders in Extra.
+  For firmware effects that choose their own colours it moves through the four hardware steps.
+- Main window: Lighting Studio, Per-Key Editor and ASUS Dial sit in one row of matching buttons.
+- Dial backlight steps taper to 2 % near the top (42 stops), so full brightness is approached more gently.
+- No "Max" toast before the backlight percentage; lighting-mode toasts use the lighting icon.
+
 ## [1.2.0] - 2026-10-18
 
 ### Added

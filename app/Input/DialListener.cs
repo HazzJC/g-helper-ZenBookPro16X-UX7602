@@ -27,7 +27,7 @@ namespace GHelper.Input
         static readonly HashSet<string> Repeatable = new()
         {
             "volume_up", "volume_down", "brightness_up", "brightness_down",
-            "backlight_up", "backlight_down", "backlight_fine_up", "backlight_fine_down", "screenpad_up", "screenpad_down",
+            "backlight_up", "backlight_down", "backlight_fine_up", "backlight_fine_down", "volume_fine_up", "volume_fine_down", "screen_fine_up", "screen_fine_down", "screenpad_up", "screenpad_down",
             "next_track", "prev_track"
         };
 
@@ -41,7 +41,7 @@ namespace GHelper.Input
         readonly System.Collections.Concurrent.BlockingCollection<Action> queue = new();
         HidStream? stream;
 
-        bool pressed = false;
+        volatile bool pressed;
         long pressedAt = 0;
         System.Threading.Timer? pendingPress;
         readonly Dictionary<string, long> lastFired = new();
@@ -53,9 +53,14 @@ namespace GHelper.Input
 
         static void DefaultDispatch(string key, string? action)
         {
-            if (action is null) InputDispatcher.KeyProcess(key);
-            else if (action == DialModes.NextModeAction) DialModes.Next();
-            else InputDispatcher.RunAction(action, "dial_mode");
+            if (action is null) { InputDispatcher.KeyProcess(key); return; }
+            if (action == DialModes.NextModeAction) { DialModes.Next(); return; }
+
+            // dial modes: run the action, then show the on-screen ring (which stands in for the action's own toast)
+            if (DialOsd.Enabled) ToastForm.SuppressUntil = Environment.TickCount64 + 600;
+            InputDispatcher.RunAction(action, "dial_mode");
+            var mode = DialModes.Current();
+            if (mode is not null) DialOsd.Show(mode, key == "dial_cw" ? 1 : -1);
         }
 
         public static bool IsSupported() => AppConfig.IsZenbookPro16X();
@@ -210,9 +215,31 @@ namespace GHelper.Input
             }
         }
 
+        /// <summary>Test hook: processes a report as if the dial had sent it (no hardware involved).</summary>
+        public void Simulate(byte button, short delta) => Handle(button, delta);
+
+        /// <summary>True while a HID stream to the dial is open.</summary>
+        public bool IsConnected => stream is not null;
+
+        /// <summary>
+        /// Raw dial activity for live displays (the ASUS Dial window): "turn" with the delta, "down" / "up" for the button.
+        /// Raised on the listener thread; handlers must marshal to their UI thread.
+        /// </summary>
+        public event Action<string, int>? Activity;
+
+        void Report(string what, int delta)
+        {
+            try { Activity?.Invoke(what, delta); }
+            catch (Exception ex) { Logger.WriteLine("Dial activity handler failed: " + ex.Message); }
+        }
+
         void Handle(byte button, short delta)
         {
-            if (delta != 0)
+            if (delta != 0) Report("turn", delta);
+            bool isDown = (button & 1) != 0;
+            if (isDown != pressed) Report(isDown ? "down" : "up", 0);
+
+            if (delta != 0 && !WheelTurn(delta))
             {
                 // normally +-1 per report; accept bigger deltas defensively
                 string key = delta > 0 ? "dial_cw" : "dial_ccw";
@@ -224,14 +251,115 @@ namespace GHelper.Input
             {
                 pressed = true;
                 pressedAt = Environment.TickCount64;
+                if (WheelEnabled && !wheelOpen) StartHoldTimer();
             }
             else if (!down && pressed)
             {
                 pressed = false;
+                CancelHoldTimer();
+
+                if (wheelJustOpened) { wheelJustOpened = false; return; }   // releasing the hold that opened the wheel
+                if (wheelOpen) { WheelSelect(); return; }                    // a press while the wheel is open picks
+
                 long held = Environment.TickCount64 - pressedAt;
                 if (held >= AppConfig.Get("dial_long_ms", 600)) Fire("dial_long");
                 else ShortPress();
             }
+        }
+
+        // ---- hold-to-pick mode wheel (dial modes only) ----
+        // Hold: the wheel opens (once the hold time passes, while still held). Turn: move the highlight. Press: pick it.
+        // 3 s without input: closes without changing anything. No press-and-turn is needed - the touch ring makes that awkward.
+
+        readonly object wheelGate = new();
+        volatile bool wheelOpen, wheelJustOpened;
+        int wheelIndex;
+        List<DialMode> wheelModes = new();
+        System.Threading.Timer? holdTimer, wheelIdle;
+        const int WHEEL_IDLE_MS = 3000;
+
+        static bool WheelEnabled => DialModes.IsActive && AppConfig.IsNotFalse("dial_wheel") && DialModes.Enabled().Count > 1;
+
+        void StartHoldTimer()
+        {
+            lock (wheelGate)
+            {
+                holdTimer?.Dispose();
+                holdTimer = new System.Threading.Timer(_ => OpenWheel(), null, AppConfig.Get("dial_long_ms", 600), Timeout.Infinite);
+            }
+        }
+
+        void CancelHoldTimer()
+        {
+            lock (wheelGate) { holdTimer?.Dispose(); holdTimer = null; }
+        }
+
+        void OpenWheel()
+        {
+            lock (wheelGate)
+            {
+                holdTimer?.Dispose();
+                holdTimer = null;
+                if (!pressed || wheelOpen) return;
+                wheelModes = DialModes.Enabled();
+                var current = DialModes.Current();
+                wheelIndex = Math.Max(0, wheelModes.FindIndex(m => m.Id == current?.Id));
+                wheelOpen = true;
+                wheelJustOpened = true;
+                RestartWheelIdle();
+            }
+            Logger.WriteLine("Dial: mode wheel opened");
+            DialOsd.ShowWheel(wheelModes, wheelIndex);
+        }
+
+        bool WheelTurn(int delta)
+        {
+            lock (wheelGate)
+            {
+                if (!wheelOpen) return false;
+                int n = wheelModes.Count;
+                wheelIndex = ((wheelIndex + Math.Sign(delta)) % n + n) % n;
+                RestartWheelIdle();
+            }
+            DialOsd.ShowWheel(wheelModes, wheelIndex);
+            return true;
+        }
+
+        void WheelSelect()
+        {
+            DialMode chosen;
+            lock (wheelGate)
+            {
+                if (!wheelOpen) return;
+                wheelOpen = false;
+                wheelIdle?.Dispose();
+                wheelIdle = null;
+                chosen = wheelModes[wheelIndex];
+            }
+            AppConfig.Set("dial_mode_current", chosen.Id);
+            Logger.WriteLine("Dial: mode wheel -> " + chosen.Id);
+            if (DialOsd.Enabled) DialOsd.Show(chosen, 0);
+            else { DialOsd.HideNow(); Program.toast?.RunToast(chosen.ToastName ?? chosen.Name, chosen.Icon); }
+        }
+
+        void WheelCancel()
+        {
+            lock (wheelGate)
+            {
+                if (!wheelOpen) return;
+                wheelOpen = false;
+                wheelJustOpened = false;
+                wheelIdle?.Dispose();
+                wheelIdle = null;
+            }
+            Logger.WriteLine("Dial: mode wheel closed without a change");
+            DialOsd.HideNow();
+        }
+
+        void RestartWheelIdle()
+        {
+            wheelIdle?.Dispose();
+            wheelIdle = new System.Threading.Timer(_ => WheelCancel(), null, WHEEL_IDLE_MS, Timeout.Infinite);
         }
 
         static bool IsBound(string key) => AppConfig.GetString(key)?.Length > 1;
