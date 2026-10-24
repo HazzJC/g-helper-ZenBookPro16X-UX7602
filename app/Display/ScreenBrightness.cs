@@ -34,13 +34,25 @@
             }
         }
 
+        // CurrentBrightness lags behind a Set (the panel ramps), so reading it back between fast dial detents
+        // returns stale values and the level jumps around. While turning, step from the last target instead.
+        const int TARGET_VALID_MS = 1500;
+        static readonly object adjustLock = new();
+        static int lastTarget = -1;
+        static long lastTargetAt;
+
         public static int Adjust(int delta)
         {
-            int brightness = Get();
-            Debug.WriteLine(brightness);
-            brightness = Math.Min(100, Math.Max(0, brightness + delta));
-            Set(brightness);
-            return brightness;
+            lock (adjustLock)
+            {
+                long now = Environment.TickCount64;
+                int brightness = lastTarget >= 0 && now - lastTargetAt < TARGET_VALID_MS ? lastTarget : Get();
+                brightness = Math.Min(100, Math.Max(0, brightness + delta));
+                Set(brightness);
+                lastTarget = brightness;
+                lastTargetAt = Environment.TickCount64;
+                return brightness;
+            }
         }
 
     }

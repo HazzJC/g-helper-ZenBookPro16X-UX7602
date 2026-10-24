@@ -1298,12 +1298,39 @@ namespace GHelper
             InitRearLight();
         }
 
+        // Applies run one at a time and coalesce: ApplyAura reads aura_mode at its start and touches shared state (timer, HID),
+        // so overlapping runs from fast dial turns could finish out of order and leave the keyboard on an older mode.
+        readonly object auraGate = new();
+        bool auraRunning, auraDirty;
+
         public void SetAura()
         {
+            lock (auraGate)
+            {
+                auraDirty = true;
+                if (auraRunning) return;
+                auraRunning = true;
+            }
+
             Task.Run(() =>
             {
-                Aura.ApplyAura();
-                VisualiseAura();
+                while (true)
+                {
+                    lock (auraGate)
+                    {
+                        if (!auraDirty) { auraRunning = false; return; }
+                        auraDirty = false;
+                    }
+                    try
+                    {
+                        Aura.ApplyAura();
+                        VisualiseAura();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteLine("SetAura failed: " + ex.Message);
+                    }
+                }
             });
         }
 

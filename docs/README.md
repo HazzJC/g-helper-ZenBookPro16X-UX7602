@@ -1,6 +1,6 @@
 > **This is the upstream G-Helper readme.** For the ZenBook Pro 16X OLED (UX7602)
 > lighting support this fork adds, see
-> [the fork readme](https://github.com/HazzJC/g-helper-16x#readme).
+> [the fork readme](https://github.com/HazzJC/g-helper-ZenBookPro16X-UX7602#readme).
 
 # G-Helper - Lightweight control tool for Asus laptops
 
