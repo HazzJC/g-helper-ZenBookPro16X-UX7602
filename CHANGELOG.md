@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Dial screen brightness jumping** (e.g. 70 > 65 > 80 > 60 %) when turned quickly: each click read the level back from Windows, which
+  lags behind a change, so it now steps from the last level it set while the dial is turning.
+- **Lighting mode out of sync** with the keyboard after fast dial turns: overlapping applies could finish out of order; they now run one
+  at a time and coalesce to the latest mode.
+
+### Changed
+- Readme rewritten as the fork's own, crediting and linking the original G-Helper (its readme is kept in `docs/README.md`); the
+  rendered laptop image is replaced by a linked review photo.
+
 ## [1.3.0] - 2026-10-22
 
 ### Added
